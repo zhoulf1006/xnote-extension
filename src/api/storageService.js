@@ -16,7 +16,8 @@ export const STORAGE_KEYS = {
   GOOGLE_DRIVE_LAST_SYNC: 'google_drive_last_sync',
   // Summary mapping keys
   SUMMARY_FOLDER_MAPPINGS: 'summary_folder_mappings', // { url: { main: 'Education', sub: 'Programming', folderId: '...' }}
-  SUMMARY_FILE_MAPPINGS: 'summary_file_mappings'      // { url: fileId } for update tracking
+  SUMMARY_FILE_MAPPINGS: 'summary_file_mappings',      // { url: fileId } for update tracking
+  SUMMARY_UPLOAD_STATUS: 'summary_upload_status'       // { url: { uploadedAt: timestamp, lastUpdatedAt: timestamp }}
 };
 
 // Map storage keys to environment variable names

@@ -14,8 +14,9 @@
         <button
           v-if="isGoogleDriveConnected && currentPage?.summary"
           class="action-btn"
+          :class="{ 'uploaded': isUploadedToDrive }"
           @click="saveToGoogleDrive"
-          title="Save to Google Drive"
+          :title="uploadTooltip"
         >
           <i class="fas fa-cloud-upload-alt"></i>
         </button>
@@ -264,6 +265,29 @@ const isFavorite = computed(() => {
   );
 });
 
+const isUploadedToDrive = computed(() => {
+  if (!mappingsStore || !currentPage.value?.url) return false;
+  return mappingsStore.isUrlUploaded(currentPage.value.url);
+});
+
+const uploadStatus = computed(() => {
+  if (!mappingsStore || !currentPage.value?.url) return null;
+  return mappingsStore.getUploadStatusForUrl(currentPage.value.url);
+});
+
+const uploadTooltip = computed(() => {
+  if (!uploadStatus.value) return 'Upload to Google Drive';
+
+  const uploadedAt = new Date(uploadStatus.value.uploadedAt);
+  const lastUpdatedAt = new Date(uploadStatus.value.lastUpdatedAt);
+
+  if (uploadedAt.getTime() === lastUpdatedAt.getTime()) {
+    return `✓ Uploaded to Google Drive on ${uploadedAt.toLocaleDateString()} at ${uploadedAt.toLocaleTimeString()}`;
+  } else {
+    return `✓ Updated in Google Drive on ${lastUpdatedAt.toLocaleDateString()} at ${lastUpdatedAt.toLocaleTimeString()}`;
+  }
+});
+
 const toggleFavorite = async () => {
   if (!currentPage.value?.summary) return;
 
@@ -358,6 +382,9 @@ const handleCategoryConfirm = async (category) => {
       result.folderId
     );
     await mappingsStore.saveFileMapping(currentPage.value.url, result.fileId);
+
+    // Save upload status (isUpdate will be true if existingFileId exists)
+    await mappingsStore.saveUploadStatus(currentPage.value.url, !!existingFileId);
 
     // Show success message (you can replace this with a better notification system)
     alert(`Summary saved to Google Drive: ${category.mainCategory} > ${category.subCategory}`);
@@ -502,7 +529,23 @@ onUnmounted(() => {
   color: #ffc107;
 }
 
-.action-btn:hover:not(.active) {
+.action-btn.uploaded {
+  color: #28a745 !important;
+}
+
+.action-btn.uploaded i {
+  color: #28a745 !important;
+}
+
+.action-btn.uploaded:hover {
+  color: #218838 !important;
+}
+
+.action-btn.uploaded:hover i {
+  color: #218838 !important;
+}
+
+.action-btn:hover:not(.active):not(.uploaded) {
   color: #ffc107;
   opacity: 0.7;
 }
