@@ -1,0 +1,36 @@
+{
+  "name": "xnote-extension",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "predev": "node scripts/generate-icons.js",
+    "dev": "vite --port 3100",
+    "build": "node build.js",
+    "build:vite": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@google/generative-ai": "^0.2.1",
+    "date-fns": "^2.30.0",
+    "file-saver": "^2.0.5",
+    "highlight.js": "^11.9.0",
+    "katex": "^0.16.19",
+    "markdown-it-katex": "^2.0.3",
+    "microsoft-cognitiveservices-speech-sdk": "^1.42.0",
+    "openai": "^4.77.3",
+    "pinia": "^2.3.0",
+    "uuid": "^9.0.1",
+    "vue": "^3.3.11",
+    "vue3-markdown-it": "^1.0.10"
+  },
+  "devDependencies": {
+    "@stagewise-plugins/vue": "^0.4.5",
+    "@stagewise/toolbar-vue": "^0.4.7",
+    "@vitejs/plugin-vue": "^4.5.2",
+    "canvas": "^2.11.2",
+    "fs-extra": "^11.1.1",
+    "png-to-ico": "^2.1.2",
+    "vite": "^5.0.8"
+  }
+}

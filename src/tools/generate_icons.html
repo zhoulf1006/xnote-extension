@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Icon Generator</title>
+</head>
+<body>
+    <canvas id="canvas" style="display: none;"></canvas>
+    <div id="output"></div>
+    <script>
+        const sizes = [16, 48, 128];
+        const output = document.getElementById('output');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        function drawIcon(size) {
+            canvas.width = size;
+            canvas.height = size;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, size, size);
+            
+            // Draw green background
+            ctx.fillStyle = '#4CAF50';  // Material Design Green
+            ctx.fillRect(0, 0, size, size);
+            
+            // Draw "HN" text
+            ctx.fillStyle = 'white';
+            ctx.font = `bold ${size * 0.5}px Arial`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('HN', size/2, size/2);
+            
+            return canvas.toDataURL('image/png');
+        }
+
+        // Generate icons and display them
+        sizes.forEach(size => {
+            const dataUrl = drawIcon(size);
+            
+            // Display icon and data URL
+            output.innerHTML += `
+                <div style="margin: 20px;">
+                    <h3>${size}x${size} Icon:</h3>
+                    <img src="${dataUrl}" width="${size}" height="${size}">
+                    <textarea rows="5" cols="50">${dataUrl.split(',')[1]}</textarea>
+                </div>
+            `;
+        });
+    </script>
+</body>
+</html>

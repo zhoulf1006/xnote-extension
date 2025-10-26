@@ -1,0 +1,244 @@
+# =====================================
+# Node.js & Package Managers
+# =====================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.yarn-integrity
+.pnpm-store/
+
+# Package manager lock files (uncomment if needed)
+# package-lock.json
+# yarn.lock
+# pnpm-lock.yaml
+
+# =====================================
+# Build Outputs & Distributions
+# =====================================
+dist/
+dist-ssr/
+build/
+out/
+*.local
+
+# Chrome Extension specific
+*.crx
+*.pem
+*.zip
+extension-*.zip
+xnote-extension-*.zip
+
+# Generated files
+public/icons/icon-*.png
+
+# =====================================
+# Environment & Configuration
+# =====================================
+.env
+.env.local
+.env.*.local
+.env.development
+.env.production
+.env.test
+
+# Private keys and certificates
+.keys/
+*.key
+*.cert
+*.crt
+*.pem
+secrets.json
+config.local.js
+
+# =====================================
+# Vue & Vite
+# =====================================
+# Vite
+.vite/
+vite.config.js.timestamp-*
+vite.config.ts.timestamp-*
+
+# Vue
+.vue-cache/
+
+# =====================================
+# IDEs & Editors
+# =====================================
+
+# Visual Studio Code
+.vscode/*
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+!.vscode/tasks.json
+*.code-workspace
+.history/
+
+# IntelliJ IDEA / WebStorm
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+*.tmlanguage.cache
+*.tmPreferences.cache
+*.stTheme.cache
+
+# Vim
+*.swp
+*.swo
+*.swn
+*.swap
+*~
+.*.swp
+.*.swo
+Session.vim
+.netrwhist
+tags
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# Atom
+.atom/
+
+# Brackets
+.brackets.json
+
+# =====================================
+# Operating System Files
+# =====================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.directory
+.Trash-*
+.nfs*
+
+# =====================================
+# Logs & Debug Files
+# =====================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+chrome-debug.log
+*.pid
+*.seed
+*.pid.lock
+
+# =====================================
+# Testing & Coverage
+# =====================================
+coverage/
+*.lcov
+.nyc_output
+.grunt
+bower_components
+.tmp
+.sass-cache
+*.spec.js.map
+test-results/
+playwright-report/
+playwright/.cache/
+
+# =====================================
+# Documentation
+# =====================================
+docs/.vitepress/dist/
+docs/.vitepress/cache/
+_book/
+.docusaurus/
+.cache-loader/
+
+# =====================================
+# Temporary Files
+# =====================================
+*.tmp
+*.temp
+*.bak
+*.backup
+*.old
+.cache/
+.parcel-cache/
+.temp/
+.tmp/
+tmp/
+temp/
+
+# =====================================
+# TypeScript
+# =====================================
+*.tsbuildinfo
+.tsc-cache/
+
+# =====================================
+# Chrome Extension Development
+# =====================================
+# Unpacked extension for testing
+unpacked/
+extension-unpacked/
+
+# Chrome profiles for testing
+chrome-profile/
+test-profile/
+
+# Extension screenshots
+screenshots/
+
+# =====================================
+# Project Specific
+# =====================================
+# Add any project-specific patterns below

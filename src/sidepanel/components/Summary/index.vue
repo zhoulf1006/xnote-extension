@@ -1,0 +1,533 @@
+<template>
+  <div class="page-container">
+    <div class="header">
+      <h1>Summary</h1>
+      <div class="header-actions">
+        <button
+          v-if="currentPage?.summary"
+          class="action-btn"
+          :class="{ 'active': isFavorite }"
+          @click="toggleFavorite"
+        >
+          <i class="fas" :class="isFavorite ? 'fa-star' : 'fa-regular fa-star'"></i>
+        </button>
+        <button
+          v-if="isGoogleDriveConnected && currentPage?.summary"
+          class="action-btn"
+          @click="saveToGoogleDrive"
+          title="Save to Google Drive"
+        >
+          <i class="fas fa-cloud-upload-alt"></i>
+        </button>
+        <button class="action-btn" @click="showFavorites = true">
+          <i class="fas fa-bookmark"></i>
+        </button>
+      </div>
+    </div>
+    <div class="summary-container">
+      <div v-if="currentPage" class="page-info">
+        <h2>{{ currentPage.title }}</h2>
+        <a :href="currentPage.url" target="_blank" class="page-link">
+          <i class="fas fa-external-link-alt"></i>
+          {{ currentPage.url }}
+          <i v-if="isFavorite" class="fas fa-star favorite-indicator"></i>
+        </a>
+      </div>
+      
+      <div class="summary-content">
+        <div v-if="isStreaming" class="streaming-content">
+          <Markdown :source="streamingContent" :options="markdownOptions" />
+          <div class="typing-indicator">
+            <span></span><span></span><span></span>
+          </div>
+        </div>
+        <div v-else-if="currentPage?.summary" class="summary-text">
+          <Markdown :source="currentPage.summary" :options="markdownOptions" />
+        </div>
+        <div v-else class="empty-state">
+          Right click on any webpage and select "Summary Page" to generate a summary
+        </div>
+      </div>
+    </div>
+    <FavoritesList
+      :show="showFavorites"
+      @close="showFavorites = false"
+      @select="handleFavoriteSelect"
+    />
+    <CategoryConfirmDialog
+      :show="showCategoryDialog"
+      :suggested-category="suggestedCategory"
+      :existing-folder="existingFolder"
+      :page-data="currentPage"
+      @confirm="handleCategoryConfirm"
+      @cancel="showCategoryDialog = false"
+    />
+  </div>
+</template>
+
+<script setup>
+import { ref, onMounted, onUnmounted, computed } from 'vue';
+import Markdown from 'vue3-markdown-it';
+import { createSummaryPrompt, streamSummary } from './summarizer';
+import useNavigationStore from '@/stores/navigation';
+import useFavoritesStore from '@/stores/favorites';
+import FavoritesList from './FavoritesList.vue';
+import CategoryConfirmDialog from './CategoryConfirmDialog.vue';
+import { useLLMConfigStore } from '@/stores/llmConfig';
+import { useGoogleDriveStore } from '@/stores/googleDrive';
+import { useSummaryMappings } from '@/stores/summaryMappings';
+import { extractCategoryFromSummary, generateCategoryForPage } from './categoryExtractor';
+import { googleDriveService } from '@/api/googleDriveService';
+
+const SUMMARY_STORAGE_KEY = 'xnote-summaries';
+const navigationStore = useNavigationStore();
+const favoritesStore = useFavoritesStore();
+const llmConfigStore = useLLMConfigStore();
+
+// Initialize stores with proper error handling
+let googleDriveStore = null;
+let mappingsStore = null;
+
+try {
+  googleDriveStore = useGoogleDriveStore();
+  mappingsStore = useSummaryMappings();
+} catch (error) {
+  console.warn('Error initializing stores:', error);
+}
+
+const currentPage = ref(null);
+const isStreaming = ref(false);
+const streamingContent = ref('');
+const showFavorites = ref(false);
+const showCategoryDialog = ref(false);
+const suggestedCategory = ref({ mainCategory: '', subCategory: '' });
+const existingFolder = ref(null);
+
+// Use computed to safely access Google Drive store
+const isGoogleDriveConnected = computed(() => {
+  return googleDriveStore?.isConnected || false;
+});
+
+const markdownOptions = {
+  html: true,
+  linkify: true,
+  typographer: true,
+  breaks: false
+};
+
+// Helper function to get user-friendly error messages
+const getErrorMessage = (error) => {
+  const errorMessage = error?.message || String(error) || '';
+  const errorString = errorMessage.toLowerCase();
+  
+  // Check for API key related errors
+  if (errorString.includes('unauthorized') || 
+      errorString.includes('401') ||
+      errorString.includes('authentication fails') ||
+      errorString.includes('api key') ||
+      errorString.includes('invalid key') ||
+      errorString.includes('invalid') && errorString.includes('key')) {
+    
+    const currentProvider = llmConfigStore.selectedProvider;
+    const providerName = currentProvider ? 
+      (currentProvider.charAt(0).toUpperCase() + currentProvider.slice(1)) : 'LLM';
+    
+    return `❌ **API Key Error**
+
+Your ${providerName} API key appears to be invalid or missing.
+
+**To fix this:**
+1. Click the **⚙️ LLM Config** button at the bottom of the sidebar
+2. Enter a valid ${providerName} API key
+3. Click **Save** to update your configuration
+4. Try generating the summary again
+
+If you don't have an API key, you'll need to get one from the ${providerName} website.`;
+  }
+  
+  // Check for network errors
+  if (errorString.includes('network') || 
+      errorString.includes('fetch') ||
+      errorString.includes('connection')) {
+    return `🌐 **Network Error**
+
+Unable to connect to the AI service. Please check your internet connection and try again.`;
+  }
+  
+  // Check for provider not configured
+  if (errorString.includes('no llm provider') || 
+      errorString.includes('provider not found') ||
+      errorString.includes('provider selected')) {
+    return `⚙️ **Configuration Required**
+
+No LLM provider is configured. Please:
+1. Click the **⚙️ LLM Config** button at the bottom of the sidebar
+2. Select a provider (OpenAI, Gemini, or DeepSeek)
+3. Enter your API key
+4. Click **Save** to complete setup`;
+  }
+  
+  // Generic error fallback
+  return `❌ **Error generating summary**
+
+${errorMessage}
+
+Please try again or check your LLM configuration in the settings.`;
+};
+
+// Load summaries from storage
+const loadSummaries = () => {
+  try {
+    const saved = localStorage.getItem(SUMMARY_STORAGE_KEY);
+    return saved ? JSON.parse(saved) : {};
+  } catch (error) {
+    console.error('Error loading summaries:', error);
+    return {};
+  }
+};
+
+// Save summaries to storage
+const saveSummary = (pageData) => {
+  try {
+    const summaries = loadSummaries();
+    summaries[pageData.url] = pageData;
+    localStorage.setItem(SUMMARY_STORAGE_KEY, JSON.stringify(summaries));
+  } catch (error) {
+    console.error('Error saving summary:', error);
+  }
+};
+
+// Handle summary request
+const handleSummaryRequest = async (pageData) => {
+  currentPage.value = {
+    url: pageData.url,
+    title: pageData.title
+  };
+  
+  isStreaming.value = true;
+  streamingContent.value = '';
+
+  try {
+    const prompt = createSummaryPrompt(pageData);
+    if (!llmConfigStore.selectedProvider) {
+      throw new Error('No LLM provider selected');
+    }
+
+    await streamSummary(
+      prompt,
+      // Handle chunks
+      async (chunk) => {
+        streamingContent.value += chunk;
+      },
+      // Handle completion
+      async (fullResponse) => {
+        currentPage.value.summary = fullResponse;
+        saveSummary(currentPage.value);
+        isStreaming.value = false;
+      },
+      // Handle errors
+      async (error) => {
+        console.error('Error generating summary:', error);
+        isStreaming.value = false;
+        streamingContent.value = getErrorMessage(error);
+      }
+    );
+  } catch (error) {
+    console.error('Error in summary generation:', error);
+    isStreaming.value = false;
+    streamingContent.value = getErrorMessage(error);
+  }
+};
+
+const handleFavoriteSelect = (favorite) => {
+  currentPage.value = {
+    title: favorite.title,
+    url: favorite.url,
+    summary: favorite.summary
+  };
+};
+
+// Message listener for content script communication
+const messageListener = async (request, sender, sendResponse) => {
+  if (request.action === 'summarizePage') {
+    navigationStore.setActiveTab('summary');
+    await handleSummaryRequest(request.data);
+    if (sendResponse) {
+      sendResponse({ success: true });
+    }
+  }
+};
+
+const isFavorite = computed(() => {
+  return favoritesStore.state.favorites.some(
+    f => f.url === currentPage.value?.url
+  );
+});
+
+const toggleFavorite = async () => {
+  if (!currentPage.value?.summary) return;
+
+  try {
+    if (isFavorite.value) {
+      const favorite = favoritesStore.state.favorites.find(
+        f => f.url === currentPage.value.url
+      );
+      if (favorite) {
+        await favoritesStore.removeFavorite(favorite.id);
+      }
+    } else {
+      await favoritesStore.addFavorite({
+        title: currentPage.value.title,
+        url: currentPage.value.url,
+        summary: currentPage.value.summary
+      });
+    }
+  } catch (error) {
+    console.error('Error toggling favorite:', error);
+  }
+};
+
+// Save to Google Drive handler
+const saveToGoogleDrive = async () => {
+  if (!currentPage.value?.summary) return;
+
+  // Check if stores are initialized
+  if (!googleDriveStore || !mappingsStore) {
+    console.error('Google Drive stores not initialized');
+    alert('Google Drive feature is not available. Please reload the extension.');
+    return;
+  }
+
+  try {
+    // First try to extract category from summary
+    let category = extractCategoryFromSummary(currentPage.value.summary);
+
+    // If not found in summary, generate it
+    if (!category) {
+      category = await generateCategoryForPage(currentPage.value);
+    }
+
+    suggestedCategory.value = category;
+
+    // Check for existing mapping
+    const existingMapping = mappingsStore.getFolderForUrl(currentPage.value.url);
+    if (existingMapping) {
+      existingFolder.value = existingMapping;
+      suggestedCategory.value = {
+        mainCategory: existingMapping.main,
+        subCategory: existingMapping.sub
+      };
+    } else {
+      existingFolder.value = null;
+    }
+
+    showCategoryDialog.value = true;
+  } catch (error) {
+    console.error('Error preparing save:', error);
+    alert('Failed to prepare save: ' + error.message);
+  }
+};
+
+// Handle category confirmation
+const handleCategoryConfirm = async (category) => {
+  showCategoryDialog.value = false;
+
+  // Check if stores are initialized
+  if (!mappingsStore) {
+    console.error('Mappings store not initialized');
+    return;
+  }
+
+  try {
+    // Get existing file ID if this URL was saved before
+    const existingFileId = mappingsStore.getFileIdForUrl(currentPage.value.url);
+
+    const result = await googleDriveService.exportSummaryToCategory({
+      title: currentPage.value.title,
+      url: currentPage.value.url,
+      content: currentPage.value.summary,
+      timestamp: new Date().toISOString(),
+      existingFileId
+    }, category.mainCategory, category.subCategory);
+
+    // Save mappings
+    await mappingsStore.saveFolderMapping(
+      currentPage.value.url,
+      category.mainCategory,
+      category.subCategory,
+      result.folderId
+    );
+    await mappingsStore.saveFileMapping(currentPage.value.url, result.fileId);
+
+    // Show success message (you can replace this with a better notification system)
+    alert(`Summary saved to Google Drive: ${category.mainCategory} > ${category.subCategory}`);
+  } catch (error) {
+    console.error('Failed to save to Google Drive:', error);
+    alert('Failed to save to Google Drive: ' + error.message);
+  }
+};
+
+onMounted(async () => {
+  // Load mappings if store is initialized
+  if (mappingsStore) {
+    try {
+      await mappingsStore.loadMappings();
+    } catch (error) {
+      console.warn('Failed to load mappings:', error);
+    }
+  }
+
+  if (chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.addListener(messageListener);
+  }
+  // Load existing favorites
+  favoritesStore.loadFavorites();
+});
+
+onUnmounted(() => {
+  if (chrome.runtime?.onMessage) {
+    chrome.runtime.onMessage.removeListener(messageListener);
+  }
+});
+</script>
+
+<style scoped>
+.summary-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.page-info {
+  padding: 8px;
+  background: #ffffff;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.page-info h2 {
+  font-size: 14px;
+  margin-bottom: 4px;
+}
+
+.page-link {
+  font-size: 11px;
+  color: #6c757d;
+  text-decoration: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.page-link:hover {
+  color: #495057;
+}
+
+.summary-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px;
+  background: #ffffff;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.empty-state {
+  color: #6c757d;
+  text-align: center;
+  padding: 16px;
+  font-size: 14px;
+}
+
+.typing-indicator {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+
+.typing-indicator span {
+  width: 6px;
+  height: 6px;
+  background-color: #9e9e9e;
+  border-radius: 50%;
+  animation: typing 1s infinite;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typing {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.action-btn {
+  background: none;
+  border: none;
+  color: #6c757d;
+  cursor: pointer;
+  padding: 4px;
+  font-size: 13px;
+}
+
+.action-btn:hover {
+  color: #495057;
+}
+
+.action-btn.active {
+  color: #ffc107;
+}
+
+.action-btn:hover:not(.active) {
+  color: #ffc107;
+  opacity: 0.7;
+}
+
+.favorite-indicator {
+  color: #ffc107;
+  margin-left: 4px;
+  font-size: 10px;
+}
+
+/* Markdown content styles */
+.summary-text :deep(p),
+.streaming-content :deep(p) {
+  margin: 8px 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.summary-text :deep(ul),
+.summary-text :deep(ol),
+.streaming-content :deep(ul),
+.streaming-content :deep(ol) {
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 8px 0;
+  padding-left: 24px;
+}
+</style>

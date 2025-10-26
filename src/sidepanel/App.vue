@@ -1,0 +1,1284 @@
+<template>
+  <div class="sidebar">
+    <nav class="nav-menu">
+      <div 
+        v-for="tab in tabs" 
+        :key="tab.id"
+        class="nav-item"
+        :class="{ active: navigationStore.state.activeTab === tab.id }"
+        @click="navigationStore.setActiveTab(tab.id)"
+      >
+        <i :class="tab.icon"></i>
+        <span class="nav-text">{{ tab.name }}</span>
+      </div>
+      <div class="nav-spacer"></div>
+      <div v-if="googleDriveStore?.isAvailable"
+           class="nav-item drive-item"
+           @click="showStorageModal = true"
+           :class="{ 'drive-connected': googleDriveStore.isConnected }">
+        <i class="fab fa-google-drive"></i>
+        <span class="nav-text">Storage & Sync</span>
+        <span class="status-dot"
+              :class="{
+                'connected': googleDriveStore.isConnected,
+                'syncing': googleDriveStore.isSyncing,
+                'error': googleDriveStore.syncStatus === 'failed'
+              }"></span>
+      </div>
+      <div class="nav-item config-item" @click="handleConfigClick">
+        <i class="fas fa-cog"></i>
+        <span class="nav-text">LLM Config</span>
+      </div>
+    </nav>
+    <main class="content">
+      <Chat v-if="navigationStore.state.activeTab === 'chat'" />
+      <Speech v-if="navigationStore.state.activeTab === 'speech'" />
+      <LLMTest v-if="navigationStore.state.activeTab === 'llm-test'" />
+      <TodoList v-if="navigationStore.state.activeTab === 'todo'" />
+      <QuickLinks v-if="navigationStore.state.activeTab === 'links'" />
+      <Translation v-if="navigationStore.state.activeTab === 'translate'" />
+      <Summary v-if="navigationStore.state.activeTab === 'summary'" />
+    </main>
+    <div v-if="showConfig" class="config-modal">
+      <div class="config-content">
+        <h2>LLM Provider Configuration</h2>
+        <div class="provider-selection">
+          <div v-for="(config, key) in llmProviders"
+               :key="key"
+               class="provider-option"
+               :class="{ selected: selectedProvider === key }"
+               @click="selectedProvider = key">
+            <input type="radio"
+                   :id="key"
+                   :value="key"
+                   v-model="selectedProvider"
+                   name="provider">
+            <label :for="key">{{ config.name }}</label>
+          </div>
+        </div>
+        
+        <div class="api-key-section">
+          <h3>API Key Configuration</h3>
+          <p class="api-key-info">
+            <i class="fas fa-info-circle"></i>
+            {{ isExtensionMode ? 
+              'API keys will be securely stored in your Chrome account storage.' : 
+              'In development mode, keys are read from environment variables.' 
+            }}
+          </p>
+          
+          <!-- API Key inputs for all providers (always rendered but conditionally shown) -->
+          <div v-show="selectedProvider === 'openai'">
+            <ApiKeyInput
+              id="openai-key"
+              label="OpenAI API Key"
+              :storage-key="STORAGE_KEYS.AZURE_OPENAI_KEY"
+              env-fallback="VITE_AZURE_OPENAI_KEY"
+              placeholder="Enter your OpenAI API key"
+              v-model:api-key="apiKeys.openai"
+              @configuration-changed="providerKeyStatus.openai = $event"
+              :key="'openai-' + configModalKey"
+            />
+          </div>
+          
+          <div v-show="selectedProvider === 'deepseek'">
+            <ApiKeyInput
+              id="deepseek-key"
+              label="DeepSeek API Key"
+              :storage-key="STORAGE_KEYS.DEEPSEEK_API_KEY"
+              env-fallback="VITE_DEEPSEEK_API_KEY"
+              placeholder="Enter your DeepSeek API key"
+              v-model:api-key="apiKeys.deepseek"
+              @configuration-changed="providerKeyStatus.deepseek = $event"
+              :key="'deepseek-' + configModalKey"
+            />
+          </div>
+          
+          <div v-show="selectedProvider === 'gemini'">
+            <ApiKeyInput
+              id="gemini-key"
+              label="Gemini API Key"
+              :storage-key="STORAGE_KEYS.GEMINI_API_KEY"
+              env-fallback="VITE_GEMINI_API_KEY"
+              placeholder="Enter your Gemini API key"
+              v-model:api-key="apiKeys.gemini"
+              @configuration-changed="providerKeyStatus.gemini = $event"
+              :key="'gemini-' + configModalKey"
+            />
+          </div>
+        </div>
+
+
+        <div class="config-actions">
+          <button class="cancel" @click="handleCancel">Cancel</button>
+          <button class="save" @click="saveConfig">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Storage & Sync Modal -->
+    <div v-if="showStorageModal" class="storage-modal">
+      <div class="storage-modal-content">
+        <div class="modal-header">
+          <h2><i class="fab fa-google-drive"></i> Storage & Sync</h2>
+          <button class="modal-close-btn" @click="showStorageModal = false">
+            <i class="fas fa-times"></i>
+          </button>
+        </div>
+
+        <!-- Connection Status -->
+        <div class="storage-section">
+          <h3 class="section-title">Connection Status</h3>
+          <div class="status-card">
+            <div class="status-row">
+              <div class="status-indicator">
+                <span v-if="googleDriveStore.isConnected" class="status-badge status-connected">
+                  <i class="fas fa-check-circle"></i> Connected
+                </span>
+                <span v-else class="status-badge status-disconnected">
+                  <i class="fas fa-times-circle"></i> Not Connected
+                </span>
+              </div>
+
+              <button v-if="!googleDriveStore.isConnected"
+                      @click="connectGoogleDrive"
+                      class="button-primary">
+                <i class="fas fa-link"></i> Connect
+              </button>
+              <button v-else
+                      @click="disconnectGoogleDrive"
+                      class="button-delete">
+                <i class="fas fa-unlink"></i> Disconnect
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sync Information -->
+        <div class="storage-section">
+          <h3 class="section-title">Sync Information</h3>
+          <div class="info-card">
+            <div class="folder-location">
+              <i class="fas fa-folder"></i>
+              <span class="location-label">Folder Location:</span>
+              <code class="location-path">Google Drive / XNote /</code>
+            </div>
+
+            <div class="sync-files">
+              <p class="sync-label">Files to be synced:</p>
+              <div class="file-list">
+                <div class="file-item">
+                  <i class="fas fa-comments"></i>
+                  <span>Chat conversations</span>
+                  <code>/chats/*.md</code>
+                </div>
+                <div class="file-item">
+                  <i class="fas fa-file-alt"></i>
+                  <span>Summaries</span>
+                  <code>/summaries/*.md</code>
+                </div>
+                <div class="file-item">
+                  <i class="fas fa-language"></i>
+                  <span>Translations</span>
+                  <code>/translations/*.md</code>
+                </div>
+                <div class="file-item">
+                  <i class="fas fa-tasks"></i>
+                  <span>Todo lists</span>
+                  <code>/todos/*.md</code>
+                </div>
+              </div>
+            </div>
+
+            <div v-if="googleDriveStore.isConnected" class="auto-sync-toggle">
+              <label class="toggle-label">
+                <input type="checkbox"
+                       v-model="googleDriveStore.syncEnabled"
+                       @change="googleDriveStore.toggleSync()">
+                <span>Enable Auto-Sync (every 30 minutes)</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sync Status -->
+        <div v-if="googleDriveStore.isConnected" class="storage-section">
+          <h3 class="section-title">Sync Status</h3>
+          <div class="sync-card">
+            <!-- Success State -->
+            <div v-if="googleDriveStore.syncStatus === 'success' && googleDriveStore.lastSyncTime"
+                 class="sync-status sync-status-success">
+              <i class="fas fa-check-circle"></i>
+              <span>Last synced: {{ formatSyncTime(googleDriveStore.lastSyncTime) }}</span>
+            </div>
+
+            <!-- Error State -->
+            <div v-if="googleDriveStore.syncStatus === 'failed' && googleDriveStore.lastSyncError"
+                 class="sync-status sync-status-error">
+              <i class="fas fa-exclamation-triangle"></i>
+              <span>Sync failed: {{ googleDriveStore.lastSyncError }}</span>
+            </div>
+
+            <!-- Syncing State -->
+            <div v-if="googleDriveStore.isSyncing" class="sync-status sync-status-progress">
+              <i class="fas fa-sync fa-spin"></i>
+              <span>Syncing...</span>
+            </div>
+
+            <!-- Sync Button -->
+            <button @click="syncNow"
+                    :disabled="googleDriveStore.isSyncing"
+                    class="button-primary sync-button">
+              <i class="fas fa-sync" :class="{ 'fa-spin': googleDriveStore.isSyncing }"></i>
+              {{ googleDriveStore.isSyncing ? 'Syncing...' : 'Sync Now' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, watch } from 'vue';
+import useNavigationStore from '@/stores/navigation';
+import { useLLMConfigStore } from '@/stores/llmConfig';
+import { useGoogleDriveStore } from '@/stores/googleDrive';
+import { llmProviders } from '@/config/llmProviders';
+import { 
+  STORAGE_KEYS, 
+  isExtensionMode as checkExtensionMode, 
+  initializeStorage, 
+  checkStorage,
+  getStoredValue 
+} from '@/api/storageService';
+import { 
+  storeSecureValue, 
+  secureStorageService 
+} from '@/api/secureStorageService';
+import Chat from './components/Chat/index.vue';
+import QuickLinks from './components/QuickLinks/index.vue';
+import TodoList from './components/TodoList.vue';
+import Translation from './components/Translation/index.vue';
+import Summary from './components/Summary/index.vue';
+import Speech from './components/Speech/index.vue';
+import LLMTest from './components/LLMTest/index.vue';
+import ApiKeyInput from './components/Common/ApiKeyInput.vue';
+
+const navigationStore = useNavigationStore();
+const llmConfigStore = useLLMConfigStore();
+const googleDriveStore = useGoogleDriveStore();
+const showConfig = ref(false);
+const showStorageModal = ref(false);
+const selectedProvider = ref(llmConfigStore.selectedProvider);
+const isExtensionMode = computed(() => checkExtensionMode());
+const configModalKey = ref(0); // Key to force component re-rendering when needed
+
+// API key state
+const apiKeys = ref({
+  openai: '',
+  deepseek: '',
+  gemini: ''
+});
+
+// Track configuration status for each provider
+const providerKeyStatus = ref({
+  openai: null,
+  deepseek: null,
+  gemini: null
+});
+
+// Load stored API keys
+const loadStoredApiKeys = async () => {
+  try {
+    console.log('Loading stored API keys...');
+    
+    // Import secure storage service
+    const { getSecureValue } = await import('@/api/secureStorageService');
+    
+    // Load all API keys in parallel
+    const [openaiKey, deepseekKey, geminiKey] = await Promise.all([
+      getSecureValue(STORAGE_KEYS.AZURE_OPENAI_KEY, 'VITE_AZURE_OPENAI_KEY'),
+      getSecureValue(STORAGE_KEYS.DEEPSEEK_API_KEY, 'VITE_DEEPSEEK_API_KEY'),
+      getSecureValue(STORAGE_KEYS.GEMINI_API_KEY, 'VITE_GEMINI_API_KEY')
+    ]);
+    
+    // Update apiKeys with stored values (show actual values)
+    apiKeys.value.openai = openaiKey;
+    apiKeys.value.deepseek = deepseekKey;
+    apiKeys.value.gemini = geminiKey;
+    
+    console.log('✅ API keys loaded');
+  } catch (error) {
+    console.warn('⚠️ Could not load stored API keys:', error);
+  }
+};
+
+// Open configuration modal
+const openConfigModal = async () => {
+  showConfig.value = true;
+  configModalKey.value++; // Force component re-render
+  
+  // Load stored API keys when modal opens
+  await loadStoredApiKeys();
+};
+
+// Add click handler to the config nav item
+const handleConfigClick = () => {
+  openConfigModal();
+};
+
+// Watch for modal close to reset state
+watch(showConfig, (newValue) => {
+  if (!newValue) {
+    // Modal was closed, increment key to ensure fresh state next time
+    configModalKey.value++;
+  }
+});
+
+onMounted(async () => {
+  try {
+    // Initialize storage service and wait for it to complete
+    console.log('Initializing storage service...');
+    const storageStatus = await initializeStorage();
+    console.log('Storage initialization completed:', storageStatus);
+
+    // Note: LLM config store will initialize itself when accessed
+    // The store maintains backward compatibility with localStorage access
+    console.log('✅ LLM config store ready (lazy initialization)');
+
+    // Initialize Google Drive store
+    await googleDriveStore.initialize();
+    console.log('✅ Google Drive store initialized');
+    
+    // Initialize secure storage
+    await secureStorageService.initialize();
+    
+    // Optionally migrate existing plain text keys to encrypted format
+    if (secureStorageService.encryptionEnabled) {
+      console.log('🔐 Encryption available, checking for migration needs...');
+      await secureStorageService.migrateToEncrypted();
+    }
+    
+    // Add a small delay to ensure Chrome APIs are fully available
+    if (storageStatus.isExtensionURL) {
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    
+    // Check storage status to make sure we're using the right storage
+    const status = await checkStorage();
+    console.log('Storage status check completed:', status);
+    
+    // Verify extension mode is correctly detected
+    console.log('Extension mode detected:', checkExtensionMode());
+    console.log('Using storage type:', storageStatus.storageType);
+    
+    if (storageStatus.isExtensionURL && !storageStatus.extensionMode) {
+      console.warn('⚠️ Extension URL detected but extension mode is false. This may indicate a problem with Chrome API availability.');
+    }
+  } catch (error) {
+    console.error('❌ Error initializing storage:', error);
+    alert('There was a problem initializing the storage system. Some features may not work correctly.');
+  }
+});
+
+// Google Drive methods
+const connectGoogleDrive = async () => {
+  try {
+    const success = await googleDriveStore.connect();
+    if (success) {
+      console.log('Successfully connected to Google Drive');
+    } else {
+      alert('Failed to connect to Google Drive. Please try again.');
+    }
+  } catch (error) {
+    console.error('Error connecting to Google Drive:', error);
+    alert('Error connecting to Google Drive: ' + error.message);
+  }
+};
+
+const disconnectGoogleDrive = async () => {
+  if (confirm('Are you sure you want to disconnect from Google Drive? This will stop all syncing.')) {
+    try {
+      await googleDriveStore.disconnect();
+      console.log('Disconnected from Google Drive');
+    } catch (error) {
+      console.error('Error disconnecting from Google Drive:', error);
+      alert('Error disconnecting from Google Drive: ' + error.message);
+    }
+  }
+};
+
+const syncNow = async () => {
+  try {
+    const success = await googleDriveStore.syncAll();
+    if (success) {
+      console.log('Sync completed successfully');
+    } else {
+      alert('Sync failed. Please check your connection and try again.');
+    }
+  } catch (error) {
+    console.error('Error syncing with Google Drive:', error);
+    alert('Error syncing with Google Drive: ' + error.message);
+  }
+};
+
+const formatSyncTime = (timestamp) => {
+  if (!timestamp) return 'Never';
+  const date = new Date(timestamp);
+  const now = new Date();
+  const diff = now - date;
+
+  // If less than 1 minute ago
+  if (diff < 60000) {
+    return 'Just now';
+  }
+
+  // If less than 1 hour ago
+  if (diff < 3600000) {
+    const minutes = Math.floor(diff / 60000);
+    return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  }
+
+  // If today
+  if (date.toDateString() === now.toDateString()) {
+    return date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  // Otherwise show date and time
+  return date.toLocaleString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+const handleCancel = async () => {
+  selectedProvider.value = llmConfigStore.selectedProvider;
+  
+  // Reset API key inputs to their stored values (not empty strings)
+  apiKeys.value = {
+    openai: '',
+    deepseek: '',
+    gemini: ''
+  };
+  
+  // Reload the stored values
+  await loadStoredApiKeys();
+  
+  showConfig.value = false;
+};
+
+const saveConfig = async () => {
+  try {
+    console.log('💾 Saving configuration...');
+    
+    // Step 1: Save API keys FIRST (before setting provider)
+    const promises = [];
+    const isDevelopment = window.location.hostname === 'localhost';
+    
+    console.log('🔑 Saving API keys...');
+    
+    // Save API keys if they have values
+    if (apiKeys.value.openai && apiKeys.value.openai.trim() !== '') {
+      promises.push(storeSecureValue(STORAGE_KEYS.AZURE_OPENAI_KEY, apiKeys.value.openai));
+      console.log('  - Saving OpenAI key');
+    } else if (apiKeys.value.openai === '') {
+      promises.push(storeSecureValue(STORAGE_KEYS.AZURE_OPENAI_KEY, ''));
+      console.log('  - Clearing OpenAI key');
+    }
+    
+    if (apiKeys.value.deepseek && apiKeys.value.deepseek.trim() !== '') {
+      promises.push(storeSecureValue(STORAGE_KEYS.DEEPSEEK_API_KEY, apiKeys.value.deepseek));
+      console.log('  - Saving DeepSeek key');
+    } else if (apiKeys.value.deepseek === '') {
+      promises.push(storeSecureValue(STORAGE_KEYS.DEEPSEEK_API_KEY, ''));
+      console.log('  - Clearing DeepSeek key');
+    }
+    
+    if (apiKeys.value.gemini && apiKeys.value.gemini.trim() !== '') {
+      promises.push(storeSecureValue(STORAGE_KEYS.GEMINI_API_KEY, apiKeys.value.gemini));
+      console.log('  - Saving Gemini key');
+    } else if (apiKeys.value.gemini === '') {
+      promises.push(storeSecureValue(STORAGE_KEYS.GEMINI_API_KEY, ''));
+      console.log('  - Clearing Gemini key');
+    }
+    
+    // Save all API keys first
+    if (promises.length > 0) {
+      await Promise.all(promises);
+      console.log('✅ API keys saved successfully');
+    } else {
+      console.log('ℹ️ No API key changes to save');
+    }
+    
+    // Step 2: Update provider selection (this will NOT trigger LLM service init yet)
+    console.log('🔄 Updating provider selection...');
+    llmConfigStore.selectedProvider = selectedProvider.value;
+    localStorage.setItem('xnote-llm-provider', selectedProvider.value);
+    
+    // Step 3: Verify storage was updated correctly
+    await checkStorage();
+    
+    // Step 4: Now safely reinitialize LLM service with the saved keys
+    console.log('🚀 Reinitializing LLM service...');
+    try {
+      // Reinitialize LLM service with new keys
+      const success = await llmConfigStore.reinitializeService();
+      if (!success && !isDevelopment) {
+        console.warn('LLM service reinitialization failed, but continuing anyway');
+      }
+    } catch (reinitError) {
+      console.error('Failed to reinitialize LLM service:', reinitError);
+      // In development mode, we can continue without a valid LLM service
+      if (!isDevelopment) {
+        throw reinitError; // Re-throw in production mode
+      }
+    }
+    
+    if (isDevelopment) {
+      console.log('API keys saved in development mode. Note that you can use the app with mock responses even without valid API keys.');
+    }
+    
+    showConfig.value = false;
+  } catch (error) {
+    console.error('Failed to save API keys:', error);
+    
+    // Show more specific error message in development mode
+    if (window.location.hostname === 'localhost') {
+      alert('There was a problem saving your API keys, but you can continue using the app in development mode with mock responses.');
+    } else {
+      alert('There was a problem saving your API keys. Please try again.');
+    }
+  }
+};
+
+const tabs = [
+  { id: 'chat', name: 'Chat', icon: 'fas fa-comments' },
+  { id: 'speech', name: 'Speech', icon: 'fas fa-microphone' },
+  { id: 'llm-test', name: 'LLM Test', icon: 'fas fa-robot' },
+  { id: 'translate', name: 'Translate', icon: 'fas fa-language' },
+  { id: 'summary', name: 'Summary', icon: 'fas fa-file-alt' },
+  { id: 'todo', name: 'Todo', icon: 'fas fa-tasks' },
+  { id: 'links', name: 'Quick Links', icon: 'fas fa-link' },
+];
+</script>
+
+<style>
+@import url('https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css');
+
+.sidebar {
+  width: 100%;
+  height: 100vh;
+  display: flex;
+  background: #f8f9fa;
+  overflow: hidden;
+}
+
+.nav-menu {
+  width: 48px;
+  background: rgba(103, 58, 183, 0.15);
+  backdrop-filter: blur(8px);
+  padding: 8px 0;
+  position: relative;
+  z-index: 1000;
+  box-shadow: 1px 0 0 rgba(255, 255, 255, 0.8);
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.nav-item {
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(0, 0, 0, 0.8);
+  position: relative;
+  transition: all 0.2s ease;
+  height: 48px;
+  box-sizing: border-box;
+  margin: 2px 0;
+}
+
+.nav-item.config-item {
+  margin-top: auto;
+  border: 0;
+  margin-bottom: 0;
+}
+
+.nav-item:hover {
+  background: rgba(195, 175, 229, 0.85);
+  color: #ffffff;
+}
+
+.nav-item.active {
+  color: #ffffff;
+  background: rgba(156, 130, 202, 0.85);
+  font-weight: 500;
+}
+
+.nav-item i {
+  text-align: center;
+  font-size: 16px;
+  transition: color 0.2s ease;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-text {
+  position: absolute;
+  left: 100%;
+  top: 0;
+  padding: 8px 12px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(4px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.15s ease;
+  pointer-events: none;
+  z-index: 1000;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  transform: translateX(-8px);
+  font-weight: 400;
+  font-size: 12px;
+  margin-top: 8px;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.nav-item:hover .nav-text {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(8px);
+  display: flex;
+  background: rgba(195, 175, 229, 1);
+}
+
+.content {
+  flex: 1;
+  padding: 8px;
+  overflow-y: auto;
+  height: 100%;
+  background: #ffffff;
+}
+
+.nav-spacer {
+  display: none;
+}
+
+.config-item {
+  margin-top: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.config-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.config-content {
+  background: white;
+  padding: 24px;
+  border-radius: 8px;
+  width: 300px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.config-content h2 {
+  font-size: 16px;
+  margin-bottom: 16px;
+  color: #333;
+}
+
+.provider-selection {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.provider-option {
+  display: flex;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.provider-option:hover {
+  background: #f8f9fa;
+  border-color: #adb5bd;
+}
+
+.provider-option.selected {
+  background: rgba(103, 58, 183, 0.1);
+  border-color: #673ab7;
+}
+
+.provider-option input[type="radio"] {
+  margin-right: 12px;
+}
+
+.provider-option label {
+  font-size: 14px;
+  color: #495057;
+  cursor: pointer;
+  flex: 1;
+}
+
+.config-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 24px;
+  justify-content: flex-end;
+}
+
+.config-actions button {
+  padding: 8px 16px;
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.config-actions button.save {
+  background: #ba92ff;
+  color: white;
+  border-color: #ba92ff;
+}
+
+.config-actions button.save:hover {
+  background: #a36dff;
+}
+
+.config-actions button.cancel {
+  background: white;
+  color: #495057;
+}
+
+.config-actions button.cancel:hover {
+  background: #ff6464dc;
+}
+
+.api-key-section {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #ddd;
+}
+
+.api-key-section h3 {
+  margin-bottom: 10px;
+  font-size: 14px;
+}
+
+.api-key-info {
+  background-color: #f0f8ff;
+  padding: 5px 8px;
+  border-radius: 3px;
+  font-size: 11px;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+}
+
+.api-key-info i {
+  margin-right: 5px;
+  color: #2196f3;
+}
+
+/* Google Drive Storage Section */
+.storage-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #e9ecef;
+}
+
+.storage-section h3 {
+  font-size: 16px;
+  margin-bottom: 15px;
+  color: #333;
+}
+
+.google-drive-config {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.drive-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 15px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #495057;
+}
+
+.drive-header i {
+  font-size: 20px;
+  color: #4285f4;
+}
+
+.connection-status {
+  margin-bottom: 15px;
+  padding: 8px 12px;
+  background: white;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+.status-connected {
+  color: #28a745;
+  font-weight: 500;
+}
+
+.status-disconnected {
+  color: #6c757d;
+}
+
+.connect-button {
+  background: #4285f4;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.connect-button:hover {
+  background: #357ae8;
+}
+
+.sync-settings {
+  margin-top: 15px;
+}
+
+.sync-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-bottom: 15px;
+}
+
+.sync-toggle input[type="checkbox"] {
+  cursor: pointer;
+}
+
+.last-sync {
+  font-size: 12px;
+  color: #6c757d;
+  margin-bottom: 15px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+}
+
+.sync-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.sync-button {
+  background: #34a853;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.sync-button:hover:not(:disabled) {
+  background: #2d8e47;
+}
+
+.sync-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.disconnect-button {
+  background: #dc3545;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+
+.disconnect-button:hover {
+  background: #c82333;
+}
+
+/* Google Drive Sidebar Icon */
+.nav-item.drive-item {
+  position: relative;
+}
+
+.nav-item.drive-item .status-dot {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #6c757d;
+  transition: all 0.2s ease;
+}
+
+.nav-item.drive-item .status-dot.connected {
+  background: #4caf50;
+}
+
+.nav-item.drive-item .status-dot.syncing {
+  background: #ffc107;
+  animation: pulse 1s infinite;
+}
+
+.nav-item.drive-item .status-dot.error {
+  background: #e03131;
+}
+
+@keyframes pulse {
+  0% { opacity: 1; }
+  50% { opacity: 0.5; }
+  100% { opacity: 1; }
+}
+
+/* Storage Modal - Following UI Standards */
+.storage-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+
+.storage-modal-content {
+  background: #ffffff;
+  border-radius: 8px;
+  width: 480px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 24px;
+  border-bottom: 1px solid #dee2e6;
+  background: rgba(103, 58, 183, 0.15);
+  border-radius: 8px 8px 0 0;
+}
+
+.modal-header h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  color: #495057;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.modal-header h2 i {
+  color: #673ab7;
+}
+
+.modal-close-btn {
+  background: none;
+  border: none;
+  color: #6c757d;
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  transition: all 0.2s ease;
+}
+
+.modal-close-btn:hover {
+  color: #495057;
+}
+
+/* Storage Sections */
+.storage-section {
+  padding: 16px 24px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.storage-section:last-child {
+  border-bottom: none;
+}
+
+.section-title {
+  font-size: 14px;
+  font-weight: 500;
+  color: #495057;
+  margin: 0 0 12px 0;
+}
+
+/* Status Card */
+.status-card {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.status-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+}
+
+.status-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.status-connected {
+  background: #e8f5e8;
+  color: #2e7d32;
+}
+
+.status-disconnected {
+  background: #f5f5f5;
+  color: #6c757d;
+}
+
+/* Buttons - Following UI Standards */
+.button-primary {
+  background: transparent;
+  color: #673ab7;
+  border: 1px solid #ba92ff;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.button-primary:hover {
+  background: #ba92ff;
+  color: white;
+}
+
+.button-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.button-delete {
+  background: #ffeaea;
+  color: #d63384;
+  border: 1px solid transparent;
+  padding: 6px 12px;
+  border-radius: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.button-delete:hover {
+  background: #ffcccb;
+}
+
+/* Info Card */
+.info-card {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.folder-location {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.location-label {
+  font-weight: 500;
+  color: #495057;
+}
+
+.location-path {
+  color: #673ab7;
+  background: rgba(103, 58, 183, 0.1);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+.sync-files {
+  margin-top: 16px;
+}
+
+.sync-label {
+  font-size: 13px;
+  color: #6c757d;
+  margin-bottom: 8px;
+}
+
+.file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.file-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  font-size: 13px;
+  color: #495057;
+}
+
+.file-item i {
+  width: 16px;
+  color: #673ab7;
+}
+
+.file-item span {
+  flex: 1;
+}
+
+.file-item code {
+  color: #6c757d;
+  background: #f5f5f5;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.auto-sync-toggle {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #dee2e6;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #495057;
+}
+
+/* Sync Card */
+.sync-card {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.sync-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.sync-status-success {
+  background: #e8f5e8;
+  color: #2e7d32;
+}
+
+.sync-status-error {
+  background: #ffeaea;
+  color: #e03131;
+}
+
+.sync-status-progress {
+  background: #fff3cd;
+  color: #495057;
+}
+
+.sync-button {
+  width: 100%;
+  justify-content: center;
+  margin-top: 8px;
+}
+
+/* Animations */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.fa-spin {
+  animation: spin 1s linear infinite;
+}
+</style>
