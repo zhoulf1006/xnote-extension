@@ -222,6 +222,23 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
         clearInterval(this.syncInterval);
         this.syncInterval = null;
       }
+    },
+
+    /**
+     * Get the Google Drive folder URL
+     * @returns {Promise<string|null>} The folder URL or null
+     */
+    async getFolderUrl() {
+      try {
+        const folderId = await googleDriveService.getRootFolderId();
+        if (folderId) {
+          return `https://drive.google.com/drive/folders/${folderId}`;
+        }
+        return null;
+      } catch (error) {
+        console.error('Error getting folder URL:', error);
+        return null;
+      }
     }
   }
 });

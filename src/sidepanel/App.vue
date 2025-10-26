@@ -161,7 +161,14 @@
             <div class="folder-location">
               <i class="fas fa-folder"></i>
               <span class="location-label">Folder Location:</span>
-              <code class="location-path">Google Drive / XNote /</code>
+              <a v-if="googleDriveStore.isConnected"
+                 @click="openGoogleDriveFolder"
+                 class="location-path location-link"
+                 title="Open in Google Drive">
+                <code>Google Drive / XNote /</code>
+                <i class="fas fa-external-link-alt"></i>
+              </a>
+              <code v-else class="location-path">Google Drive / XNote /</code>
             </div>
 
             <div class="sync-files">
@@ -420,6 +427,27 @@ const syncNow = async () => {
   } catch (error) {
     console.error('Error syncing with Google Drive:', error);
     alert('Error syncing with Google Drive: ' + error.message);
+  }
+};
+
+const openGoogleDriveFolder = async () => {
+  try {
+    const folderUrl = await googleDriveStore.getFolderUrl();
+    if (folderUrl) {
+      // Use chrome.tabs.create if available (extension environment)
+      if (typeof chrome !== 'undefined' && chrome.tabs) {
+        chrome.tabs.create({ url: folderUrl });
+      } else {
+        // Fallback for development mode
+        window.open(folderUrl, '_blank');
+      }
+    } else {
+      console.warn('Could not get Google Drive folder URL');
+      alert('Could not open Google Drive folder. Please make sure you are connected.');
+    }
+  } catch (error) {
+    console.error('Error opening Google Drive folder:', error);
+    alert('Error opening Google Drive folder: ' + error.message);
   }
 };
 
@@ -1173,6 +1201,29 @@ const tabs = [
   padding: 2px 6px;
   border-radius: 4px;
   font-size: 12px;
+}
+
+.location-link {
+  cursor: pointer;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+}
+
+.location-link:hover {
+  background: rgba(103, 58, 183, 0.2);
+  color: #5e35b1;
+}
+
+.location-link i {
+  font-size: 10px;
+  opacity: 0.6;
+}
+
+.location-link:hover i {
+  opacity: 1;
 }
 
 .sync-files {

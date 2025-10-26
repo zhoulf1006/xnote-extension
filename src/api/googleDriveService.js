@@ -665,6 +665,20 @@ class GoogleDriveService {
   }
 
   /**
+   * Get the root folder ID for XNote
+   * @returns {Promise<string|null>} Folder ID or null
+   */
+  async getRootFolderId() {
+    if (!this.rootFolderId) {
+      const storedFolderId = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_FOLDER_ID);
+      if (storedFolderId) {
+        this.rootFolderId = storedFolderId;
+      }
+    }
+    return this.rootFolderId;
+  }
+
+  /**
    * Sync all data to Google Drive
    * @returns {Promise<void>}
    */
