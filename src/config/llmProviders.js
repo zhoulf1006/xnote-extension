@@ -2,8 +2,7 @@ export const llmProviders = {
   openai: {
     name: 'OpenAI',
     baseURL: 'https://api.rdsec.trendmicro.com/prod/aiendpoint/v1/',
-    defaultModel: 'gpt-4',
-    visionModel: 'gpt-4-vision-preview', // Vision-capable model
+    defaultModel: 'gpt-5',
     apiVersion: '2024-02-15-preview',
     apiKeyEnv: 'VITE_AZURE_OPENAI_KEY',
     clientType: 'openai',

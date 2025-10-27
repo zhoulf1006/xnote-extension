@@ -39,7 +39,7 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 
 // Props
 const props = defineProps({
@@ -70,16 +70,6 @@ const promptTemplates = [
     id: 'describe',
     label: 'Describe Image',
     prompt: 'Describe what you see in this image in detail.'
-  },
-  {
-    id: 'extract-table',
-    label: 'Extract Table',
-    prompt: 'Extract any tables from this image and format them clearly.'
-  },
-  {
-    id: 'translate',
-    label: 'Translate Text',
-    prompt: 'Extract all text from this image and translate it to English.'
   }
 ];
 
@@ -101,6 +91,14 @@ function selectPrompt(template) {
   selectedPrompt.value = template.id;
   emit('prompt-selected', template.prompt);
 }
+
+// Emit the default prompt on mount
+onMounted(() => {
+  const defaultTemplate = promptTemplates.find(t => t.id === selectedPrompt.value);
+  if (defaultTemplate) {
+    emit('prompt-selected', defaultTemplate.prompt);
+  }
+});
 </script>
 
 <style scoped>
@@ -111,7 +109,7 @@ function selectPrompt(template) {
 .capture-button {
   width: 100%;
   padding: 14px 20px;
-  background: linear-gradient(135deg, #673ab7 0%, #8e44ad 100%);
+  background: linear-gradient(135deg, #8e72be 0%, #ba79d5 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -127,7 +125,7 @@ function selectPrompt(template) {
 }
 
 .capture-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #5e35b1 0%, #7b3a9d 100%);
+  background: linear-gradient(135deg, #8e72be 0%, #ba79d5 100%);
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(103, 58, 183, 0.4);
 }

@@ -193,12 +193,11 @@
       displayHeight: height
     };
 
-    // Add visual feedback for capture
-    selectionBox.style.transition = 'all 0.2s ease';
-    selectionBox.style.border = '2px solid #4CAF50';
-    selectionBox.style.background = 'rgba(76, 175, 80, 0.2)';
+    // Remove overlay immediately BEFORE capturing to ensure clean screenshot
+    removeOverlay();
 
-    // Send crop data to background script
+    // Send crop data to background script after overlay is removed
+    // Small delay to ensure DOM has updated and overlay is fully removed
     setTimeout(() => {
       chrome.runtime.sendMessage({
         action: 'captureSelectedArea',
@@ -207,9 +206,8 @@
         if (chrome.runtime.lastError) {
           console.error('Error sending crop data:', chrome.runtime.lastError);
         }
-        removeOverlay();
       });
-    }, 200);
+    }, 50); // Minimal delay just to ensure DOM update
   }
 
   /**

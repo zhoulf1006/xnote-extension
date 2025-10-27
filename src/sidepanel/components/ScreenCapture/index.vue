@@ -4,7 +4,7 @@
     <div class="capture-header">
       <h2>
         <i class="fas fa-camera"></i>
-        Screen Capture & Text Extraction
+        Screen Capture
       </h2>
       <p class="capture-description">
         Capture any area of the screen and extract text using AI
@@ -30,6 +30,7 @@
       :isCapturing="isCapturing"
       :isProcessing="isProcessing"
       @start-capture="startCapture"
+      @prompt-selected="handlePromptSelected"
     />
 
     <!-- Image Preview -->
@@ -120,6 +121,9 @@ const error = ref(null);
 const captureHistory = ref([]);
 const hidePreview = ref(false);
 
+// Store the selected prompt - default to text extraction
+const selectedPrompt = ref('Extract all text from this image accurately. Preserve formatting and structure.');
+
 // Computed
 const currentProviderName = computed(() => {
   const providers = {
@@ -140,6 +144,10 @@ function openLLMConfig() {
   // Trigger the LLM config modal - this simulates clicking the config button
   const event = new CustomEvent('openLLMConfig');
   window.dispatchEvent(event);
+}
+
+function handlePromptSelected(prompt) {
+  selectedPrompt.value = prompt;
 }
 
 async function startCapture() {
@@ -191,8 +199,8 @@ async function processScreenshot(imageData, cropData) {
     // Extract base64 data
     const base64Data = screenshotService.extractBase64(processedImage);
 
-    // Use LLM service to extract text
-    const stream = await llmService.extractTextFromImage(base64Data, { stream: true });
+    // Use LLM service with the selected prompt (either text extraction or image description)
+    const stream = await llmService.analyzeImage(base64Data, selectedPrompt.value, { stream: true });
 
     // Handle streaming response
     isStreaming.value = true;

@@ -102,7 +102,7 @@ export class LLMService {
       }
     }
 
-    // Format message for multimodal input
+    // Format message for multimodal input with OpenAI vision API format
     const messages = [
       {
         role: 'user',
@@ -112,8 +112,10 @@ export class LLMService {
             text: prompt
           },
           {
-            type: 'image',
-            data: base64Data
+            type: 'image_url',
+            image_url: {
+              url: `data:image/png;base64,${base64Data}`
+            }
           }
         ]
       }
