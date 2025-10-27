@@ -32,7 +32,6 @@
     </nav>
     <main class="content">
       <Chat v-if="navigationStore.state.activeTab === 'chat'" />
-      <TodoList v-if="navigationStore.state.activeTab === 'todo'" />
       <QuickLinks v-if="navigationStore.state.activeTab === 'links'" />
       <Translation v-if="navigationStore.state.activeTab === 'translate'" />
       <Summary v-if="navigationStore.state.activeTab === 'summary'" />
@@ -251,11 +250,6 @@
                   <span>Translations</span>
                   <code>/translations/*.md</code>
                 </div>
-                <div class="file-item">
-                  <i class="fas fa-tasks"></i>
-                  <span>Todo lists</span>
-                  <code>/todos/*.md</code>
-                </div>
               </div>
             </div>
 
@@ -333,7 +327,6 @@ import {
 } from '@/api/secureStorageService';
 import Chat from './components/Chat/index.vue';
 import QuickLinks from './components/QuickLinks/index.vue';
-import TodoList from './components/TodoList.vue';
 import Translation from './components/Translation/index.vue';
 import Summary from './components/Summary/index.vue';
 import ScreenCapture from './components/ScreenCapture/index.vue';
@@ -760,7 +753,6 @@ const tabs = [
   { id: 'capture', name: 'Capture', icon: 'fas fa-camera' },
   { id: 'translate', name: 'Translate', icon: 'fas fa-language' },
   { id: 'summary', name: 'Summary', icon: 'fas fa-file-alt' },
-  { id: 'todo', name: 'Todo', icon: 'fas fa-tasks' },
   { id: 'links', name: 'Quick Links', icon: 'fas fa-link' },
 ];
 </script>

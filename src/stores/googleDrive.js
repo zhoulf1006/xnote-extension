@@ -16,8 +16,7 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
     syncDetails: {
       chats: 0,
       summaries: 0,
-      translations: 0,
-      todos: 0
+      translations: 0
     },
     // Custom folder location state
     useCustomLocation: false,
@@ -165,7 +164,7 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
 
     /**
      * Export content to Google Drive
-     * @param {string} type - Content type (chat, summary, translation, todo)
+     * @param {string} type - Content type (chat, summary, translation)
      * @param {Object} data - Content data
      */
     async exportContent(type, data) {

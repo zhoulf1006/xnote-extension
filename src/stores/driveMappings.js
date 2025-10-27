@@ -3,7 +3,7 @@
  *
  * This store manages content mappings for different Google Drive storage locations.
  * Each location (identified by its root folder ID) maintains its own set of mappings
- * for summaries, chats, todos, and translations.
+ * for summaries, chats, and translations.
  *
  * Benefits:
  * - No data loss when switching locations
@@ -46,13 +46,6 @@ export const useDriveMappings = defineStore('driveMappings', {
      */
     currentChats() {
       return this.currentLocation?.chats || {};
-    },
-
-    /**
-     * Get todos for current location
-     */
-    currentTodos() {
-      return this.currentLocation?.todos || {};
     },
 
     /**
@@ -110,7 +103,6 @@ export const useDriveMappings = defineStore('driveMappings', {
           lastAccessed: new Date().toISOString(),
           summaries: {},
           chats: {},
-          todos: {},
           translations: {}
         };
       } else {
@@ -291,11 +283,9 @@ export const useDriveMappings = defineStore('driveMappings', {
         counts: {
           summaries: Object.keys(loc.summaries || {}).length,
           chats: Object.keys(loc.chats || {}).length,
-          todos: Object.keys(loc.todos || {}).length,
           translations: Object.keys(loc.translations || {}).length,
           total: Object.keys(loc.summaries || {}).length +
                  Object.keys(loc.chats || {}).length +
-                 Object.keys(loc.todos || {}).length +
                  Object.keys(loc.translations || {}).length
         }
       }));
@@ -319,7 +309,6 @@ export const useDriveMappings = defineStore('driveMappings', {
           lastAccessed: new Date().toISOString(),
           summaries: {},
           chats: {},
-          todos: {},
           translations: {}
         };
       }

@@ -78,13 +78,13 @@ make pack
 - **Translation**: Real-time AI translation with multi-provider support
 - **Summary**: Web content summarization with favorites system
 - **QuickLinks**: Bookmark management with categories (renamed from SegLinks)
-- **TodoList**: Task management with persistent storage
 - **LLMTest**: Provider testing and debugging interface
 - **Common**: Shared components (ApiKeyInput, Separator, Tooltip)
 
 #### Removed Components
 - **HackerNews**: News aggregation (removed)
 - **Finance**: USD deposit calculator (removed)
+- **TodoList**: Task management with persistent storage (removed)
 
 #### Vue 3 Patterns
 - **Composition API**: All components use `<script setup>` syntax

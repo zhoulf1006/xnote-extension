@@ -37,13 +37,6 @@ An AI-powered Chrome extension for note-taking and productivity, featuring a con
 - **Export capabilities** for sharing and archival
 - **Integration with all LLM providers** for flexibility
 
-### ✅ Todo List Management
-- **Persistent task storage** across browser sessions
-- **Add, edit, delete tasks** with intuitive controls
-- **Mark tasks as complete** with visual feedback
-- **Clean, minimalist interface** for distraction-free productivity
-- **Local storage persistence** with automatic saving
-
 ### 🔗 Quick Links Manager
 - **Category-based organization** for bookmarks
 - **Add current page** to categories via context menu
@@ -184,7 +177,6 @@ xnote-extension/
 │   │   │   ├── Translation/ # Translation service
 │   │   │   ├── Summary/    # Page summarization
 │   │   │   ├── QuickLinks/ # Bookmark manager
-│   │   │   ├── TodoList.vue # Task management
 │   │   │   └── Common/     # Shared components
 │   │   └── stores/         # Pinia stores
 │   ├── background.js       # Service worker

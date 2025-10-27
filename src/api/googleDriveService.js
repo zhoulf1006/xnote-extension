@@ -182,7 +182,6 @@ class GoogleDriveService {
       await this.createFolder('chats', this.rootFolderId);
       await this.createFolder('summaries', this.rootFolderId);
       await this.createFolder('translations', this.rootFolderId);
-      await this.createFolder('todos', this.rootFolderId);
     } catch (error) {
       console.error('Error initializing folder structure:', error);
     }
@@ -468,7 +467,7 @@ class GoogleDriveService {
 
   /**
    * Export content to Google Drive
-   * @param {string} type - Content type (chat, summary, translation, todo)
+   * @param {string} type - Content type (chat, summary, translation)
    * @param {Object} data - Content data
    * @returns {Promise<string>} File ID
    */
@@ -494,10 +493,6 @@ class GoogleDriveService {
       case 'translation':
         fileName = `translation_${timestamp}.md`;
         content = this.formatTranslationAsMarkdown(data);
-        break;
-      case 'todo':
-        fileName = `todos_${timestamp}.md`;
-        content = this.formatTodoAsMarkdown(data);
         break;
       default:
         throw new Error(`Unknown content type: ${type}`);
@@ -648,27 +643,6 @@ class GoogleDriveService {
       markdown += `**Original:** ${trans.original}\n`;
       markdown += `**Translation:** ${trans.translated}\n\n`;
       markdown += `---\n\n`;
-    });
-
-    return markdown;
-  }
-
-  /**
-   * Format todos as Markdown
-   * @param {Object} data - Todo data
-   * @returns {string} Markdown content
-   */
-  formatTodoAsMarkdown(data) {
-    const { todos } = data;
-    const date = new Date().toLocaleString();
-
-    let markdown = `# Todo List\n`;
-    markdown += `**Date:** ${date}\n\n`;
-    markdown += `## Tasks\n`;
-
-    todos.forEach(todo => {
-      const checkbox = todo.completed ? '[x]' : '[ ]';
-      markdown += `- ${checkbox} ${todo.text}\n`;
     });
 
     return markdown;
