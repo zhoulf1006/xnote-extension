@@ -164,12 +164,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     }
     return true;
   }
-  
+
   if (request.action === 'savePageToCategory') {
     // This will be handled by the links service in the sidebar
     return true;
   }
-  
+
   if (request.action === 'notifyPageSaved') {
     // Send notification to content script with error handling and retry
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -181,7 +181,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     });
   }
-  
+
   if (request.action === 'notifyPageSaveError') {
     // Send error notification to content script with error handling and retry
     chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
@@ -193,4 +193,77 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       }
     });
   }
+
+  // Screenshot capture handlers
+  if (request.action === 'startScreenshotCapture') {
+    // Inject screenshot overlay content script into active tab
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (tabs[0]) {
+        try {
+          // First ensure the tab is focused
+          await chrome.windows.update(tabs[0].windowId, { focused: true });
+          await chrome.tabs.update(tabs[0].id, { active: true });
+
+          // Inject the screenshot overlay script
+          await chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id },
+            files: ['src/content-scripts/screenshot-overlay.js']
+          });
+
+          sendResponse({ success: true });
+        } catch (error) {
+          console.error('Error injecting screenshot overlay:', error);
+          sendResponse({ success: false, error: error.message });
+        }
+      } else {
+        sendResponse({ success: false, error: 'No active tab found' });
+      }
+    });
+    return true; // Will respond asynchronously
+  }
+
+  if (request.action === 'captureSelectedArea') {
+    // Capture the visible tab and crop to selection
+    handleScreenshotCapture(request.cropData, sender, sendResponse);
+    return true; // Will respond asynchronously
+  }
+
+  if (request.action === 'screenshotCancelled') {
+    // Notify sidepanel that screenshot was cancelled
+    chrome.runtime.sendMessage({
+      action: 'screenshotCancelled'
+    });
+    sendResponse({ success: true });
+  }
 });
+
+// Handle screenshot capture and cropping
+async function handleScreenshotCapture(cropData, sender, sendResponse) {
+  try {
+    // Capture the visible tab
+    chrome.tabs.captureVisibleTab(null, { format: 'png' }, async (dataUrl) => {
+      if (chrome.runtime.lastError) {
+        console.error('Error capturing tab:', chrome.runtime.lastError);
+        sendResponse({ success: false, error: chrome.runtime.lastError.message });
+        return;
+      }
+
+      // Send the captured image and crop data to the sidepanel
+      chrome.runtime.sendMessage({
+        action: 'screenshotCaptured',
+        imageData: dataUrl,
+        cropData: cropData
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('Error sending screenshot to sidepanel:', chrome.runtime.lastError);
+          sendResponse({ success: false, error: chrome.runtime.lastError.message });
+        } else {
+          sendResponse({ success: true });
+        }
+      });
+    });
+  } catch (error) {
+    console.error('Error in screenshot capture:', error);
+    sendResponse({ success: false, error: error.message });
+  }
+}

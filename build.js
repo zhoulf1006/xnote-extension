@@ -28,12 +28,15 @@ async function buildExtension() {
   await fs.copy('public/data', 'dist/data')
   
   console.log('Copying scripts...')
-  
+
   // Copy background script
   await fs.copy('background.js', 'dist/background.js')
-  
+
   // Copy content script
   await fs.copy('src/content.js', 'dist/content.js')
+
+  // Copy content-scripts directory (for screenshot overlay)
+  await fs.copy('src/content-scripts', 'dist/src/content-scripts')
   
   console.log('Processing HTML files...')
   

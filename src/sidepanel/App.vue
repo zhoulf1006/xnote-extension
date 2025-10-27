@@ -38,6 +38,7 @@
       <QuickLinks v-if="navigationStore.state.activeTab === 'links'" />
       <Translation v-if="navigationStore.state.activeTab === 'translate'" />
       <Summary v-if="navigationStore.state.activeTab === 'summary'" />
+      <ScreenCapture v-if="navigationStore.state.activeTab === 'capture'" />
     </main>
     <div v-if="showConfig" class="config-modal">
       <div class="config-content">
@@ -270,6 +271,7 @@ import Translation from './components/Translation/index.vue';
 import Summary from './components/Summary/index.vue';
 import Speech from './components/Speech/index.vue';
 import LLMTest from './components/LLMTest/index.vue';
+import ScreenCapture from './components/ScreenCapture/index.vue';
 import ApiKeyInput from './components/Common/ApiKeyInput.vue';
 
 const navigationStore = useNavigationStore();
@@ -344,6 +346,11 @@ watch(showConfig, (newValue) => {
 });
 
 onMounted(async () => {
+  // Listen for custom event to open LLM config
+  window.addEventListener('openLLMConfig', () => {
+    openConfigModal();
+  });
+
   try {
     // Initialize storage service and wait for it to complete
     console.log('Initializing storage service...');
@@ -587,6 +594,7 @@ const saveConfig = async () => {
 
 const tabs = [
   { id: 'chat', name: 'Chat', icon: 'fas fa-comments' },
+  { id: 'capture', name: 'Capture', icon: 'fas fa-camera' },
   { id: 'speech', name: 'Speech', icon: 'fas fa-microphone' },
   { id: 'llm-test', name: 'LLM Test', icon: 'fas fa-robot' },
   { id: 'translate', name: 'Translate', icon: 'fas fa-language' },
