@@ -637,7 +637,6 @@ const tabs = [
 }
 
 .nav-item.config-item {
-  margin-top: auto;
   border: 0;
   margin-bottom: 0;
 }
@@ -706,11 +705,10 @@ const tabs = [
 }
 
 .nav-spacer {
-  display: none;
+  flex: 1;
 }
 
 .config-item {
-  margin-top: auto;
   border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
