@@ -153,8 +153,71 @@
           </div>
         </div>
 
-        <!-- Sync Information -->
-        <div class="storage-section">
+        <!-- Storage Location Section (moved above Sync Information) -->
+        <div class="storage-section with-separator" v-if="googleDriveStore.isConnected">
+          <h3 class="section-title">Storage Location</h3>
+          <div class="location-card">
+            <!-- Current Location Display -->
+            <div class="current-location">
+              <i class="fas fa-folder"></i>
+              <span class="location-label">Current Location:</span>
+              <code class="location-path">{{ googleDriveStore.getDisplayPath() }}</code>
+            </div>
+
+            <!-- Location Options -->
+            <div class="location-options">
+              <label class="radio-option">
+                <input type="radio"
+                       v-model="locationMode"
+                       value="default">
+                <span>Use default location (My Drive root)</span>
+              </label>
+
+              <label class="radio-option">
+                <input type="radio"
+                       v-model="locationMode"
+                       value="custom">
+                <span>Choose custom folder location</span>
+              </label>
+            </div>
+
+            <!-- Folder Picker Button -->
+            <button v-if="locationMode === 'custom'"
+                    @click="openFolderBrowser"
+                    :disabled="googleDriveStore.isChangingLocation"
+                    class="button-primary picker-button">
+              <i class="fas fa-folder-open"></i>
+              Browse Folders
+            </button>
+
+            <!-- Selected Folder Display -->
+            <div v-if="selectedFolder" class="selected-folder">
+              <i class="fas fa-check-circle"></i>
+              <span>Selected: {{ selectedFolder.path }}</span>
+            </div>
+
+            <!-- Apply Changes Button -->
+            <button v-if="hasLocationChanges"
+                    @click="applyLocationChanges"
+                    :disabled="googleDriveStore.isChangingLocation"
+                    class="button-primary apply-button">
+              <i class="fas fa-save"></i>
+              {{ googleDriveStore.isChangingLocation ? 'Applying...' : 'Apply Location Change' }}
+            </button>
+
+            <!-- Location Change Info -->
+            <div v-if="hasLocationChanges" class="location-info">
+              <i class="fas fa-info-circle"></i>
+              <span>
+                <strong>Note:</strong> Each storage location maintains its own files and organization.
+                Previously uploaded content will remain in the old location, and the new location will start fresh.
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Sync Information (moved after Storage Location) -->
+        <div class="storage-section with-separator">
           <h3 class="section-title">Sync Information</h3>
           <div class="info-card">
             <div class="folder-location">
@@ -164,10 +227,10 @@
                  @click="openGoogleDriveFolder"
                  class="location-path location-link"
                  title="Open in Google Drive">
-                <code>Google Drive / XNote /</code>
+                <code>{{ googleDriveStore.getDisplayPath() }}</code>
                 <i class="fas fa-external-link-alt"></i>
               </a>
-              <code v-else class="location-path">Google Drive / XNote /</code>
+              <code v-else class="location-path">{{ googleDriveStore.getDisplayPath() }}</code>
             </div>
 
             <div class="sync-files">
@@ -208,7 +271,7 @@
         </div>
 
         <!-- Sync Status -->
-        <div v-if="googleDriveStore.isConnected" class="storage-section">
+        <div v-if="googleDriveStore.isConnected" class="storage-section with-separator">
           <h3 class="section-title">Sync Status</h3>
           <div class="sync-card">
             <!-- Success State -->
@@ -242,6 +305,13 @@
         </div>
       </div>
     </div>
+
+    <!-- Folder Browser Modal -->
+    <FolderBrowser
+      v-if="showFolderBrowser"
+      @select="onFolderSelected"
+      @cancel="closeFolderBrowser"
+    />
   </div>
 </template>
 
@@ -251,12 +321,11 @@ import useNavigationStore from '@/stores/navigation';
 import { useLLMConfigStore } from '@/stores/llmConfig';
 import { useGoogleDriveStore } from '@/stores/googleDrive';
 import { llmProviders } from '@/config/llmProviders';
-import { 
-  STORAGE_KEYS, 
-  isExtensionMode as checkExtensionMode, 
-  initializeStorage, 
-  checkStorage,
-  getStoredValue 
+import {
+  STORAGE_KEYS,
+  isExtensionMode as checkExtensionMode,
+  initializeStorage,
+  checkStorage
 } from '@/api/storageService';
 import { 
   storeSecureValue, 
@@ -269,6 +338,7 @@ import Translation from './components/Translation/index.vue';
 import Summary from './components/Summary/index.vue';
 import ScreenCapture from './components/ScreenCapture/index.vue';
 import ApiKeyInput from './components/Common/ApiKeyInput.vue';
+import FolderBrowser from './components/FolderBrowser/index.vue';
 
 const navigationStore = useNavigationStore();
 const llmConfigStore = useLLMConfigStore();
@@ -278,6 +348,23 @@ const showStorageModal = ref(false);
 const selectedProvider = ref(llmConfigStore.selectedProvider);
 const isExtensionMode = computed(() => checkExtensionMode());
 const configModalKey = ref(0); // Key to force component re-rendering when needed
+
+// Folder location state
+const locationMode = ref('default');
+const selectedFolder = ref(null);
+const showFolderBrowser = ref(false);
+const hasLocationChanges = computed(() => {
+  if (locationMode.value === 'default' && googleDriveStore.useCustomLocation) {
+    return true;
+  }
+  if (locationMode.value === 'custom' && !googleDriveStore.useCustomLocation) {
+    return selectedFolder.value !== null;
+  }
+  if (locationMode.value === 'custom' && googleDriveStore.useCustomLocation) {
+    return selectedFolder.value && selectedFolder.value.id !== googleDriveStore.parentFolderId;
+  }
+  return false;
+});
 
 // API key state
 const apiKeys = ref({
@@ -338,6 +425,86 @@ watch(showConfig, (newValue) => {
   if (!newValue) {
     // Modal was closed, increment key to ensure fresh state next time
     configModalKey.value++;
+  }
+});
+
+// Folder selection handlers
+const openFolderBrowser = () => {
+  showFolderBrowser.value = true;
+};
+
+const onFolderSelected = async (folder) => {
+  showFolderBrowser.value = false;
+
+  try {
+    // Validate the selected folder
+    const validatedFolder = await googleDriveStore.validateCustomFolder(folder);
+    if (validatedFolder) {
+      selectedFolder.value = validatedFolder;
+    }
+  } catch (error) {
+    console.error('Error validating folder:', error);
+    alert('Failed to validate the selected folder. Please try again.');
+  }
+};
+
+const closeFolderBrowser = () => {
+  showFolderBrowser.value = false;
+};
+
+const applyLocationChanges = async () => {
+  // Show confirmation dialog explaining the new location behavior
+  const confirmMessage =
+    'Changing storage location will switch to a different folder context.\n\n' +
+    '• Each location maintains its own files and organization\n' +
+    '• Content in the old location will remain there\n' +
+    '• The new location will start fresh or use existing files if you\'ve used it before\n\n' +
+    'Do you want to continue?';
+
+  if (!confirm(confirmMessage)) {
+    return;
+  }
+
+  try {
+    let success = false;
+
+    if (locationMode.value === 'default') {
+      // Reset to default location
+      success = await googleDriveStore.resetToDefaultLocation();
+    } else if (locationMode.value === 'custom' && selectedFolder.value) {
+      // Apply custom location
+      success = await googleDriveStore.applyCustomLocation(
+        selectedFolder.value.id,
+        selectedFolder.value.name
+      );
+    }
+
+    if (success) {
+      selectedFolder.value = null;
+      // Update location mode based on new state
+      locationMode.value = googleDriveStore.useCustomLocation ? 'custom' : 'default';
+      alert('Storage location changed successfully!\n\nYou are now working in the new location.');
+    } else {
+      alert('Failed to change storage location. Please try again.');
+    }
+  } catch (error) {
+    console.error('Error applying location changes:', error);
+    alert('Error changing storage location: ' + error.message);
+  }
+};
+
+// Initialize location mode on mount
+watch(() => googleDriveStore.isConnected, (connected) => {
+  if (connected) {
+    locationMode.value = googleDriveStore.useCustomLocation ? 'custom' : 'default';
+  }
+});
+
+watch(showStorageModal, (newValue) => {
+  if (newValue) {
+    // Initialize location mode when modal opens
+    locationMode.value = googleDriveStore.useCustomLocation ? 'custom' : 'default';
+    selectedFolder.value = null;
   }
 });
 
@@ -1043,8 +1210,7 @@ const tabs = [
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 16px 24px;
-  border-bottom: 1px solid #dee2e6;
+  padding: 12px 20px;
   background: rgba(103, 58, 183, 0.15);
   border-radius: 8px 8px 0 0;
 }
@@ -1079,25 +1245,26 @@ const tabs = [
 
 /* Storage Sections */
 .storage-section {
-  padding: 16px 24px;
-  border-bottom: 1px solid #dee2e6;
+  padding: 8px 16px;
 }
 
-.storage-section:last-child {
-  border-bottom: none;
+.storage-section.with-separator {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #ddd;
 }
 
 .section-title {
   font-size: 14px;
   font-weight: 500;
   color: #495057;
-  margin: 0 0 12px 0;
+  margin: 0 0 8px 0;
 }
 
 /* Status Card */
 .status-card {
   background: #f8f9fa;
-  padding: 12px;
+  padding: 10px;
   border-radius: 4px;
 }
 
@@ -1178,7 +1345,7 @@ const tabs = [
 /* Info Card */
 .info-card {
   background: #f8f9fa;
-  padding: 12px;
+  padding: 10px;
   border-radius: 4px;
 }
 
@@ -1227,7 +1394,7 @@ const tabs = [
 }
 
 .sync-files {
-  margin-top: 16px;
+  margin-top: 12px;
 }
 
 .sync-label {
@@ -1239,14 +1406,14 @@ const tabs = [
 .file-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
 }
 
 .file-item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 8px;
+  gap: 6px;
+  padding: 6px;
   background: white;
   border-radius: 4px;
   font-size: 13px;
@@ -1271,8 +1438,8 @@ const tabs = [
 }
 
 .auto-sync-toggle {
-  margin-top: 16px;
-  padding-top: 16px;
+  margin-top: 12px;
+  padding-top: 12px;
   border-top: 1px solid #dee2e6;
 }
 
@@ -1288,7 +1455,7 @@ const tabs = [
 /* Sync Card */
 .sync-card {
   background: #f8f9fa;
-  padding: 12px;
+  padding: 10px;
   border-radius: 4px;
 }
 
@@ -1296,7 +1463,7 @@ const tabs = [
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px;
+  padding: 6px;
   border-radius: 4px;
   margin-bottom: 12px;
   font-size: 13px;
@@ -1331,5 +1498,111 @@ const tabs = [
 
 .fa-spin {
   animation: spin 1s linear infinite;
+}
+
+/* Folder Location Styles */
+.location-card {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 4px;
+}
+
+.current-location {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 6px;
+  background: white;
+  border-radius: 4px;
+}
+
+.current-location i {
+  color: #673ab7;
+}
+
+.location-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.radio-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  background: white;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.radio-option:hover {
+  background: rgba(103, 58, 183, 0.05);
+}
+
+.radio-option input[type="radio"] {
+  cursor: pointer;
+}
+
+.radio-option span {
+  font-size: 13px;
+  color: #495057;
+  cursor: pointer;
+}
+
+.picker-button {
+  margin-bottom: 12px;
+}
+
+.selected-folder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px;
+  background: #e8f5e8;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: #2e7d32;
+}
+
+.selected-folder i {
+  color: #2e7d32;
+}
+
+.apply-button {
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.location-info {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 4px;
+  font-size: 12px;
+  color: #1565c0;
+  margin-top: 12px;
+}
+
+.location-info i {
+  color: #2196f3;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.location-info span {
+  line-height: 1.4;
+}
+
+.location-info strong {
+  color: #1565c0;
 }
 </style>

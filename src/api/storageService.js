@@ -12,6 +12,9 @@ export const STORAGE_KEYS = {
   GOOGLE_DRIVE_FOLDER_ID: 'google_drive_folder_id',
   GOOGLE_DRIVE_SYNC_ENABLED: 'google_drive_sync_enabled',
   GOOGLE_DRIVE_LAST_SYNC: 'google_drive_last_sync',
+  GOOGLE_DRIVE_PARENT_FOLDER_ID: 'google_drive_parent_folder_id',  // Custom parent folder ID
+  GOOGLE_DRIVE_PARENT_FOLDER_NAME: 'google_drive_parent_folder_name', // Display name
+  GOOGLE_DRIVE_USE_CUSTOM_LOCATION: 'google_drive_use_custom_location', // Boolean flag
   // Summary mapping keys
   SUMMARY_FOLDER_MAPPINGS: 'summary_folder_mappings', // { url: { main: 'Education', sub: 'Programming', folderId: '...' }}
   SUMMARY_FILE_MAPPINGS: 'summary_file_mappings',      // { url: fileId } for update tracking

@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import { googleDriveService } from '@/api/googleDriveService';
-import { getStoredValue, STORAGE_KEYS } from '@/api/storageService';
+import { googleFolderBrowserService } from '@/api/googleFolderBrowserService';
+import { getStoredValue, storeValue, STORAGE_KEYS } from '@/api/storageService';
+import { useDriveMappings } from './driveMappings';
 
 export const useGoogleDriveStore = defineStore('googleDrive', {
   state: () => ({
@@ -16,7 +18,12 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
       summaries: 0,
       translations: 0,
       todos: 0
-    }
+    },
+    // Custom folder location state
+    useCustomLocation: false,
+    parentFolderId: null,
+    parentFolderName: null,
+    isChangingLocation: false
   }),
 
   actions: {
@@ -49,6 +56,24 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
         this.syncEnabled = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_SYNC_ENABLED) || false;
         this.lastSyncTime = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_LAST_SYNC);
 
+        // Load custom folder configuration
+        const folderConfig = await googleDriveService.getFolderConfiguration();
+        this.useCustomLocation = folderConfig.useCustom;
+        this.parentFolderId = folderConfig.parentId;
+        this.parentFolderName = folderConfig.parentName;
+
+        // Initialize drive mappings with current location
+        if (this.isConnected) {
+          const driveMappings = useDriveMappings();
+          await driveMappings.loadMappings();
+
+          // Get root folder ID and set as current location
+          const rootFolderId = await googleDriveService.getRootFolderId();
+          if (rootFolderId) {
+            await driveMappings.setCurrentLocation(rootFolderId, this.getDisplayPath());
+          }
+        }
+
         return true;
       } catch (error) {
         console.error('Error initializing Google Drive store:', error);
@@ -72,6 +97,16 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
 
         if (success) {
           console.log('Successfully connected to Google Drive');
+
+          // Initialize drive mappings with current location
+          const driveMappings = useDriveMappings();
+          await driveMappings.loadMappings();
+
+          // Get root folder ID and set as current location
+          const rootFolderId = await googleDriveService.getRootFolderId();
+          if (rootFolderId) {
+            await driveMappings.setCurrentLocation(rootFolderId, this.getDisplayPath());
+          }
         }
 
         return success;
@@ -239,6 +274,121 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
         console.error('Error getting folder URL:', error);
         return null;
       }
+    },
+
+    /**
+     * Validate and prepare a custom folder selection
+     * Note: The actual folder selection is handled by the FolderBrowser component
+     * @param {Object} folder - Selected folder from FolderBrowser
+     * @returns {Promise<{id: string, name: string, path: string}|null>} Validated folder or null
+     */
+    async validateCustomFolder(folder) {
+      try {
+        // Validate that the folder still exists
+        const isValid = await googleFolderBrowserService.validateFolder(folder.id);
+
+        if (!isValid) {
+          throw new Error('Selected folder no longer exists or is not accessible');
+        }
+
+        // Get the full path if not provided
+        let fullPath = folder.path;
+        if (!fullPath) {
+          const pathArray = await googleFolderBrowserService.buildFolderPath(folder.id);
+          fullPath = pathArray.map(f => f.name).join(' / ');
+        }
+
+        return {
+          id: folder.id,
+          name: folder.name,
+          path: fullPath || folder.name
+        };
+      } catch (error) {
+        console.error('Error validating custom folder:', error);
+        this.lastSyncError = 'Failed to validate folder: ' + error.message;
+        throw error;
+      }
+    },
+
+    /**
+     * Apply custom folder location
+     * @param {string} folderId - Folder ID
+     * @param {string} folderName - Folder name
+     * @returns {Promise<boolean>} Success status
+     */
+    async applyCustomLocation(folderId, folderName) {
+      this.isChangingLocation = true;
+      this.lastSyncError = null;
+
+      try {
+        await googleDriveService.setCustomParentFolder(folderId, folderName);
+
+        // Update store state
+        this.useCustomLocation = true;
+        this.parentFolderId = folderId;
+        this.parentFolderName = folderName;
+
+        // Update drive mappings with new location
+        const driveMappings = useDriveMappings();
+        const rootFolderId = await googleDriveService.getRootFolderId();
+        if (rootFolderId) {
+          await driveMappings.setCurrentLocation(rootFolderId, this.getDisplayPath());
+        }
+
+        console.log('Successfully changed storage location to:', folderName);
+        return true;
+      } catch (error) {
+        console.error('Error applying custom location:', error);
+        this.lastSyncError = 'Failed to change location: ' + error.message;
+        return false;
+      } finally {
+        this.isChangingLocation = false;
+      }
+    },
+
+    /**
+     * Reset to default storage location
+     * @returns {Promise<boolean>} Success status
+     */
+    async resetToDefaultLocation() {
+      this.isChangingLocation = true;
+      this.lastSyncError = null;
+
+      try {
+        await googleDriveService.resetToDefaultLocation();
+
+        // Update store state
+        this.useCustomLocation = false;
+        this.parentFolderId = null;
+        this.parentFolderName = null;
+
+        // Update drive mappings with new location
+        const driveMappings = useDriveMappings();
+        const rootFolderId = await googleDriveService.getRootFolderId();
+        if (rootFolderId) {
+          await driveMappings.setCurrentLocation(rootFolderId, this.getDisplayPath());
+        }
+
+        console.log('Successfully reset to default storage location');
+        return true;
+      } catch (error) {
+        console.error('Error resetting to default location:', error);
+        this.lastSyncError = 'Failed to reset location: ' + error.message;
+        return false;
+      } finally {
+        this.isChangingLocation = false;
+      }
+    },
+
+    /**
+     * Get the display path for current storage location
+     * @returns {string} Display path
+     */
+    getDisplayPath() {
+      if (this.useCustomLocation && this.parentFolderName) {
+        return `${this.parentFolderName} / XNote /`;
+      }
+      return 'My Drive / XNote /';
     }
   }
 });

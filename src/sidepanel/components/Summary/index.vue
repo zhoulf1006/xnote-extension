@@ -76,7 +76,7 @@ import FavoritesList from './FavoritesList.vue';
 import CategoryConfirmDialog from './CategoryConfirmDialog.vue';
 import { useLLMConfigStore } from '@/stores/llmConfig';
 import { useGoogleDriveStore } from '@/stores/googleDrive';
-import { useSummaryMappings } from '@/stores/summaryMappings';
+import { useDriveMappings } from '@/stores/driveMappings';
 import { extractCategoryFromSummary, generateCategoryForPage } from './categoryExtractor';
 import { googleDriveService } from '@/api/googleDriveService';
 
@@ -91,7 +91,7 @@ let mappingsStore = null;
 
 try {
   googleDriveStore = useGoogleDriveStore();
-  mappingsStore = useSummaryMappings();
+  mappingsStore = useDriveMappings();  // Use new location-aware store
 } catch (error) {
   console.warn('Error initializing stores:', error);
 }

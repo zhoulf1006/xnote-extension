@@ -155,8 +155,27 @@ class GoogleDriveService {
         }
       }
 
-      // Create root folder
-      this.rootFolderId = await this.createFolder('XNote', null);
+      // Check for custom parent folder configuration
+      const useCustomLocation = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_USE_CUSTOM_LOCATION);
+      const parentFolderId = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID);
+
+      let targetParentId = null; // Default to root
+
+      if (useCustomLocation && parentFolderId) {
+        // Verify parent folder still exists
+        const parentExists = await this.checkFileExists(parentFolderId);
+        if (parentExists) {
+          targetParentId = parentFolderId;
+          console.log('Using custom parent folder:', parentFolderId);
+        } else {
+          // Parent folder was deleted, reset to default
+          console.warn('Custom parent folder no longer exists, using default location');
+          await this.resetToDefaultLocation();
+        }
+      }
+
+      // Create root folder in the appropriate location
+      this.rootFolderId = await this.createFolder('XNote', targetParentId);
       await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_FOLDER_ID, this.rootFolderId);
 
       // Create subfolders
@@ -676,6 +695,76 @@ class GoogleDriveService {
       }
     }
     return this.rootFolderId;
+  }
+
+  /**
+   * Set custom parent folder for XNote storage
+   * @param {string} folderId - Parent folder ID
+   * @param {string} folderName - Parent folder name for display
+   * @returns {Promise<void>}
+   */
+  async setCustomParentFolder(folderId, folderName) {
+    try {
+      // Validate folder exists
+      const exists = await this.checkFileExists(folderId);
+      if (!exists) {
+        throw new Error('Selected folder no longer exists');
+      }
+
+      // Store custom folder configuration
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID, folderId);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_NAME, folderName);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_USE_CUSTOM_LOCATION, true);
+
+      // Clear existing root folder ID to force re-initialization
+      this.rootFolderId = null;
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_FOLDER_ID, null);
+
+      // Re-initialize folder structure in new location
+      await this.initializeFolderStructure();
+    } catch (error) {
+      console.error('Error setting custom parent folder:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reset to default location (My Drive root)
+   * @returns {Promise<void>}
+   */
+  async resetToDefaultLocation() {
+    try {
+      // Clear custom folder configuration
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID, null);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_NAME, null);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_USE_CUSTOM_LOCATION, false);
+
+      // Clear existing root folder ID to force re-initialization
+      this.rootFolderId = null;
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_FOLDER_ID, null);
+
+      // Re-initialize folder structure in default location
+      await this.initializeFolderStructure();
+    } catch (error) {
+      console.error('Error resetting to default location:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get current folder configuration
+   * @returns {Promise<{useCustom: boolean, parentId: string|null, parentName: string|null}>}
+   */
+  async getFolderConfiguration() {
+    const useCustom = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_USE_CUSTOM_LOCATION) || false;
+    const parentId = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID);
+    const parentName = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_NAME);
+
+    return {
+      useCustom,
+      parentId,
+      parentName
+    };
   }
 
   /**

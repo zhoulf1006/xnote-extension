@@ -117,6 +117,16 @@ export const useSummaryMappings = defineStore('summaryMappings', {
       await storeValue(STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS, {});
       await storeValue(STORAGE_KEYS.SUMMARY_FILE_MAPPINGS, {});
       await storeValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS, {});
+    },
+
+    /**
+     * Clear only upload status (used when changing storage location)
+     * This allows summaries to be re-uploaded to the new location
+     */
+    async clearUploadStatus() {
+      this.uploadStatus = {};
+      await storeValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS, {});
+      console.log('Cleared all summary upload status for re-uploading to new location');
     }
   }
 });
