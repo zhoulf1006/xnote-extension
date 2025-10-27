@@ -7,8 +7,6 @@ export const STORAGE_KEYS = {
   AZURE_OPENAI_KEY: 'azure_openai_key',
   DEEPSEEK_API_KEY: 'deepseek_api_key',
   GEMINI_API_KEY: 'gemini_api_key',
-  AZURE_SPEECH_KEY: 'azure_speech_key',
-  AZURE_SPEECH_REGION: 'azure_speech_region',
   // Google Drive keys
   GOOGLE_DRIVE_CONNECTED: 'google_drive_connected',
   GOOGLE_DRIVE_FOLDER_ID: 'google_drive_folder_id',
@@ -24,9 +22,7 @@ export const STORAGE_KEYS = {
 const ENV_MAP = {
   [STORAGE_KEYS.AZURE_OPENAI_KEY]: 'VITE_AZURE_OPENAI_KEY',
   [STORAGE_KEYS.DEEPSEEK_API_KEY]: 'VITE_DEEPSEEK_API_KEY',
-  [STORAGE_KEYS.GEMINI_API_KEY]: 'VITE_GEMINI_API_KEY',
-  [STORAGE_KEYS.AZURE_SPEECH_KEY]: 'VITE_AZURE_SPEECH_KEY',
-  [STORAGE_KEYS.AZURE_SPEECH_REGION]: 'VITE_AZURE_SPEECH_REGION'
+  [STORAGE_KEYS.GEMINI_API_KEY]: 'VITE_GEMINI_API_KEY'
 };
 
 // The main key for storing all API keys in development mode

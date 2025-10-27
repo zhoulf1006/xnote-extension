@@ -32,8 +32,6 @@
     </nav>
     <main class="content">
       <Chat v-if="navigationStore.state.activeTab === 'chat'" />
-      <Speech v-if="navigationStore.state.activeTab === 'speech'" />
-      <LLMTest v-if="navigationStore.state.activeTab === 'llm-test'" />
       <TodoList v-if="navigationStore.state.activeTab === 'todo'" />
       <QuickLinks v-if="navigationStore.state.activeTab === 'links'" />
       <Translation v-if="navigationStore.state.activeTab === 'translate'" />
@@ -269,8 +267,6 @@ import QuickLinks from './components/QuickLinks/index.vue';
 import TodoList from './components/TodoList.vue';
 import Translation from './components/Translation/index.vue';
 import Summary from './components/Summary/index.vue';
-import Speech from './components/Speech/index.vue';
-import LLMTest from './components/LLMTest/index.vue';
 import ScreenCapture from './components/ScreenCapture/index.vue';
 import ApiKeyInput from './components/Common/ApiKeyInput.vue';
 
@@ -595,8 +591,6 @@ const saveConfig = async () => {
 const tabs = [
   { id: 'chat', name: 'Chat', icon: 'fas fa-comments' },
   { id: 'capture', name: 'Capture', icon: 'fas fa-camera' },
-  { id: 'speech', name: 'Speech', icon: 'fas fa-microphone' },
-  { id: 'llm-test', name: 'LLM Test', icon: 'fas fa-robot' },
   { id: 'translate', name: 'Translate', icon: 'fas fa-language' },
   { id: 'summary', name: 'Summary', icon: 'fas fa-file-alt' },
   { id: 'todo', name: 'Todo', icon: 'fas fa-tasks' },

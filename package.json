@@ -17,7 +17,6 @@
     "highlight.js": "^11.9.0",
     "katex": "^0.16.19",
     "markdown-it-katex": "^2.0.3",
-    "microsoft-cognitiveservices-speech-sdk": "^1.42.0",
     "openai": "^4.77.3",
     "pinia": "^2.3.0",
     "uuid": "^9.0.1",
