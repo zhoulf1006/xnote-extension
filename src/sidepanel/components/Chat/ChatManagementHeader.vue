@@ -154,27 +154,24 @@ const uploadToGoogleDrive = async () => {
 
   isUploading.value = true
   try {
-    // Format chat for upload
-    const chatContent = {
+    // Format chat data for export
+    const chatData = {
       title: activeChat.value.title,
       messages: activeChat.value.messages,
+      chatId: activeChat.value.id,
       createdAt: activeChat.value.createdAt,
       updatedAt: activeChat.value.updatedAt
     }
 
-    const content = JSON.stringify(chatContent, null, 2)
-    const fileName = `${activeChat.value.title.replace(/[^a-z0-9]/gi, '_')}_${new Date().toISOString().split('T')[0]}.json`
-
-    // Upload to Google Drive
-    const fileId = await googleDriveService.uploadFile(
-      fileName,
-      content,
-      'application/json',
-      'XNote_Chats' // Folder name
-    )
+    // Export to Google Drive using the existing exportContent method
+    const fileId = await googleDriveService.exportContent('chat', chatData)
 
     if (fileId) {
       // Save mapping using the new saveChatMapping method
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const chatTitle = activeChat.value.title.replace(/[^a-z0-9]/gi, '_');
+      const fileName = `${chatTitle}_${timestamp}.md`;
+
       await driveMappings.saveChatMapping(activeChat.value.id, {
         driveFileId: fileId,
         fileName: fileName,

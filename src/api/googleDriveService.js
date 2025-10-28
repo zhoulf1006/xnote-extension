@@ -483,7 +483,9 @@ class GoogleDriveService {
 
     switch (type) {
       case 'chat':
-        fileName = `chat_${timestamp}.md`;
+        // Use chat title if available, otherwise fall back to timestamp
+        const chatTitle = data.title ? this.sanitizeFilename(data.title) : 'chat';
+        fileName = `${chatTitle}_${timestamp}.md`;
         content = this.formatChatAsMarkdown(data);
         break;
       case 'summary':
