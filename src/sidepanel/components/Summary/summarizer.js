@@ -10,12 +10,16 @@ URL: ${pageData.url}
 Content:
 ${pageData.content}
 
-The summary should capture the main points and key details of the text while conveying the author's intended meaning accurately. Please ensure that the summary is well-organized and easy to read, with clear headings and subheadings to guide the reader through each section. The length of the summary should be appropriate to capture the main points and key details of the text, without including unnecessary information or becoming overly long.
+Your entire response must be formatted using Markdown. The summary must be structured in the following two parts:
+
+## Overall Summary
+Provide a single, 1-2 sentence paragraph that captures the absolute main point, thesis, or conclusion of the text.
+
+## Key Highlights
+Create a bulleted list of the 3-5 most critical takeaways, key findings, or actionable insights from the article. Focus only on high-level concepts and their implications, not on specific examples, data points, or granular details.
 
 Additionally, at the end of your summary, please add a section called "## Category" and suggest an appropriate two-level category for organizing this content. Use the format "Main Category > Subcategory".
-
 Main categories should be broad domains like: Education, Technology, Business, Health, Entertainment, Science, News, Lifestyle, Sports, Arts, Finance, Travel, Food, Gaming, Politics, etc.
-
 Subcategories should be more specific within that domain. Examples:
 - Technology > AI Research
 - Education > Programming
