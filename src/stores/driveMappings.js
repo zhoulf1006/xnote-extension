@@ -187,6 +187,38 @@ export const useDriveMappings = defineStore('driveMappings', {
     },
 
     /**
+     * Save chat mapping for current location
+     * @param {string} chatId - Chat ID
+     * @param {Object} data - Mapping data (fileId, fileName, uploadedAt, etc.)
+     */
+    async saveChatMapping(chatId, data) {
+      if (!this.currentLocationId) {
+        console.error('No current location set');
+        return;
+      }
+
+      // Ensure chats object exists
+      if (!this.locations[this.currentLocationId].chats) {
+        this.locations[this.currentLocationId].chats = {};
+      }
+
+      // Merge with existing data
+      const existing = this.locations[this.currentLocationId].chats[chatId] || {};
+      this.locations[this.currentLocationId].chats[chatId] = {
+        ...existing,
+        ...data,
+        lastUpdatedAt: new Date().toISOString()
+      };
+
+      // Set uploadedAt if not already set
+      if (!this.locations[this.currentLocationId].chats[chatId].uploadedAt) {
+        this.locations[this.currentLocationId].chats[chatId].uploadedAt = new Date().toISOString();
+      }
+
+      await this.saveToStorage();
+    },
+
+    /**
      * Get folder mapping for URL in current location
      * @param {string} url - Page URL
      * @returns {Object|null} Folder category info

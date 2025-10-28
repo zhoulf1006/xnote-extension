@@ -1,14 +1,9 @@
 <template>
   <div class="page-container">
-    <div class="header">
-      <h1>Chat</h1>
-      <button v-if="googleDriveStore?.isConnected && messages.length > 0"
-              @click="exportToGoogleDrive"
-              class="export-button"
-              title="Export chat to Google Drive">
-        <i class="fas fa-cloud-upload-alt"></i>
-      </button>
-    </div>
+    <ChatManagementHeader
+      @new-chat="handleNewChat"
+      @chat-loaded="handleChatLoaded"
+    />
     <div class="chat-container" ref="chatContainer">
       <div v-for="message in messages" 
            :key="message.id" 
@@ -55,7 +50,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch, onUnmounted } from 'vue'
+import { ref, onMounted, nextTick, watch, onUnmounted, computed } from 'vue'
 import { v4 as uuidv4 } from 'uuid'
 import Markdown from 'vue3-markdown-it'
 import hljs from 'highlight.js'
@@ -63,8 +58,8 @@ import useNavigationStore from '@/stores/navigation'
 import { useLLMConfigStore } from '@/stores/llmConfig'
 import { useGoogleDriveStore } from '@/stores/googleDrive'
 import { streamChat } from '@/api/chatService'
-
-const CHAT_STORAGE_KEY = 'xnote-chat'
+import chatHistory from '@/stores/chatHistory'
+import ChatManagementHeader from './ChatManagementHeader.vue'
 
 const messages = ref([])
 const newMessage = ref('')
@@ -72,12 +67,14 @@ const chatContainer = ref(null)
 const messageInput = ref(null)
 const isStreaming = ref(false)
 const streamingMessage = ref('')
-const chatId = ref('')
 
 // Create store instance at component level
 const navigationStore = useNavigationStore()
 const llmConfigStore = useLLMConfigStore()
 const googleDriveStore = useGoogleDriveStore()
+
+// Use computed to get activeChat from store
+const activeChat = computed(() => chatHistory.state.activeChat)
 
 const markdownOptions = {
   html: true,
@@ -98,22 +95,45 @@ const markdownOptions = {
 const getErrorMessage = (error) => {
   const errorMessage = error?.message || String(error) || '';
   const errorString = errorMessage.toLowerCase();
-  
+
+  // Check for token expiry errors
+  if (errorString.includes('token') && errorString.includes('expired')) {
+    const currentProvider = llmConfigStore.selectedProvider;
+    const providerName = currentProvider ?
+      (currentProvider.charAt(0).toUpperCase() + currentProvider.slice(1)) : 'LLM';
+
+    return `⏱️ **Authentication Token Expired**
+
+${errorMessage}
+
+**To fix this:**
+1. Your ${providerName} authentication token has expired
+2. Click the **⚙️ LLM Config** button at the bottom of the sidebar
+3. Enter a new valid API key/token
+4. Click **Save** to update your configuration
+5. Try sending your message again`;
+  }
+
   // Check for API key related errors
-  if (errorString.includes('unauthorized') || 
+  if (errorString.includes('unauthorized') ||
       errorString.includes('401') ||
-      errorString.includes('authentication fails') ||
+      errorString.includes('authentication fail') ||
+      (errorString.includes('invalid') && errorString.includes('token')) ||
       errorString.includes('api key') ||
       errorString.includes('invalid key') ||
       errorString.includes('invalid') && errorString.includes('key')) {
-    
-    const currentProvider = llmConfigStore.selectedProvider;
-    const providerName = currentProvider ? 
-      (currentProvider.charAt(0).toUpperCase() + currentProvider.slice(1)) : 'LLM';
-    
-    return `❌ **API Key Error**
 
-Your ${providerName} API key appears to be invalid or missing.
+    const currentProvider = llmConfigStore.selectedProvider;
+    const providerName = currentProvider ?
+      (currentProvider.charAt(0).toUpperCase() + currentProvider.slice(1)) : 'LLM';
+
+    // Show specific error message if available
+    const specificError = errorMessage !== 'An unexpected error occurred' ?
+      `\n**Error Details:** ${errorMessage}\n` : '';
+
+    return `❌ **API Authentication Error**
+${specificError}
+Your ${providerName} API key/token appears to be invalid or missing.
 
 **To fix this:**
 1. Click the **⚙️ LLM Config** button at the bottom of the sidebar
@@ -123,18 +143,30 @@ Your ${providerName} API key appears to be invalid or missing.
 
 If you don't have an API key, you'll need to get one from the ${providerName} website.`;
   }
-  
+
+  // Check for 400 Bad Request errors - show specific API error message
+  if (error?.status === 400 || errorString.includes('400')) {
+    const providerInfo = error?.provider ? ` (${error.provider})` : '';
+
+    return `⚠️ **Bad Request Error${providerInfo}**
+
+${errorMessage}
+
+This error typically means there's an issue with the request format or parameters.
+Please check your message and try again, or verify your LLM configuration in the settings.`;
+  }
+
   // Check for network errors
-  if (errorString.includes('network') || 
+  if (errorString.includes('network') ||
       errorString.includes('fetch') ||
       errorString.includes('connection')) {
     return `🌐 **Network Error**
 
 Unable to connect to the AI service. Please check your internet connection and try again.`;
   }
-  
+
   // Check for provider not configured
-  if (errorString.includes('no llm provider') || 
+  if (errorString.includes('no llm provider') ||
       errorString.includes('provider not found') ||
       errorString.includes('provider selected')) {
     return `⚙️ **Configuration Required**
@@ -145,46 +177,41 @@ No LLM provider is configured. Please:
 3. Enter your API key
 4. Click **Save** to complete setup`;
   }
-  
-  // Generic error fallback
+
+  // Generic error fallback - but show the actual error message
   return `❌ **Error processing your request**
 
-${errorMessage}
+**Error:** ${errorMessage}
 
 Please try again or check your LLM configuration in the settings.`;
 }
 
 const formatMessage = (text) => {
-  // Clean up extra newlines
+  // Clean up extra newlines and format properly
   return text.trim()
+    // Replace 3 or more consecutive newlines with just 2 (preserve paragraph breaks)
+    .replace(/\n{3,}/g, '\n\n')
+    // Remove extra newline before bullet points (•, -, *, or numbered lists)
+    .replace(/\n\n(\s*[•\-\*\d+\.])/g, '\n$1')
+    // Ensure single newline between consecutive bullet/list items
+    .replace(/([•\-\*].+)\n\n(?=\s*[•\-\*])/g, '$1\n')
+    // Handle numbered lists similarly
+    .replace(/(\d+\..+)\n\n(?=\s*\d+\.)/g, '$1\n')
 }
 
-const loadMessages = () => {
-  try {
-    const savedChat = localStorage.getItem(CHAT_STORAGE_KEY)
-    if (savedChat) {
-      const chat = JSON.parse(savedChat)
-      messages.value = chat.messages || []
-      chatId.value = chat.chatId
-    } else {
-      messages.value = []
-      chatId.value = uuidv4()
-    }
-  } catch (error) {
-    console.error('Error loading messages:', error)
+// Load messages from active chat
+const loadMessages = async () => {
+  if (activeChat.value) {
+    messages.value = activeChat.value.messages || []
+  } else {
     messages.value = []
-    chatId.value = uuidv4()
   }
 }
 
-const saveMessages = () => {
-  try {
-    localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({
-      chatId: chatId.value,
-      messages: messages.value
-    }))
-  } catch (error) {
-    console.error('Error saving messages:', error)
+// Save messages to active chat
+const saveMessages = async () => {
+  if (messages.value.length > 0) {
+    await chatHistory.saveChatMessages(messages.value)
   }
 }
 
@@ -205,6 +232,11 @@ const scrollToBottom = async () => {
 const sendMessage = async () => {
   if (!newMessage.value.trim() || isStreaming.value) return
 
+  // Create new chat if none exists
+  if (!activeChat.value) {
+    await chatHistory.createNewChat()
+  }
+
   const userMessage = {
     id: Date.now(),
     role: 'user',
@@ -213,7 +245,7 @@ const sendMessage = async () => {
   }
 
   messages.value.push(userMessage)
-  saveMessages()
+  await saveMessages()
   newMessage.value = ''
   await scrollToBottom()
 
@@ -238,7 +270,7 @@ const sendMessage = async () => {
           content: fullResponse,
           timestamp: new Date().toISOString()
         });
-        saveMessages();
+        await saveMessages();
         isStreaming.value = false;
         await scrollToBottom();
       },
@@ -250,7 +282,7 @@ const sendMessage = async () => {
           content: getErrorMessage(error),
           timestamp: new Date().toISOString()
         });
-        saveMessages();
+        await saveMessages();
         isStreaming.value = false;
         await scrollToBottom();
       }
@@ -258,6 +290,24 @@ const sendMessage = async () => {
   } catch (error) {
     console.error('Failed to send message:', error);
   }
+}
+
+// Handle new chat creation
+const handleNewChat = async () => {
+  messages.value = []
+  await loadMessages()
+  await scrollToBottom()
+}
+
+// Handle chat loaded from history
+const handleChatLoaded = async (chatId) => {
+  if (chatId === null) {
+    // Active chat was deleted
+    messages.value = []
+  } else {
+    await loadMessages()
+  }
+  await scrollToBottom()
 }
 
 const messageListener = async (request, sender, sendResponse) => {
@@ -306,33 +356,25 @@ const initializeMessageListener = () => {
   return false;
 }
 
-onMounted(() => {
-  loadMessages();
+onMounted(async () => {
+  // Initialize chat history store
+  await chatHistory.init();
+
+  // Load messages from active chat
+  await loadMessages();
+
   const listenerInitialized = initializeMessageListener();
   if (!listenerInitialized) {
     console.warn('Chrome runtime messaging not available');
   }
 })
 
-// Export chat to Google Drive
-const exportToGoogleDrive = async () => {
-  if (!googleDriveStore?.isConnected || messages.value.length === 0) {
-    return;
-  }
+// Watch for active chat changes
+watch(activeChat, async () => {
+  await loadMessages()
+  await scrollToBottom()
+})
 
-  try {
-    const chatData = {
-      messages: messages.value,
-      chatId: chatId.value
-    };
-
-    await googleDriveStore.exportContent('chat', chatData);
-    alert('Chat exported to Google Drive successfully!');
-  } catch (error) {
-    console.error('Error exporting chat to Google Drive:', error);
-    alert('Failed to export chat to Google Drive. Please try again.');
-  }
-};
 
 onUnmounted(() => {
   if (typeof chrome !== 'undefined' && chrome.runtime?.onMessage) {
@@ -351,34 +393,6 @@ watch(newMessage, adjustTextareaHeight)
 </script>
 
 <style scoped>
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.export-button {
-  background: #4285f4;
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: background 0.2s;
-}
-
-.export-button:hover {
-  background: #357ae8;
-}
-
-.export-button i {
-  font-size: 14px;
-}
-
 .chat-container {
   flex: 1;
   overflow-y: auto;
@@ -528,6 +542,26 @@ button:disabled {
 
 .message-text :deep(ol li:last-child) {
   margin-bottom: 0;
+}
+
+.message-text :deep(ul) {
+  list-style-position: outside;
+  padding-left: 24px;
+  margin: 4px 0;
+}
+
+.message-text :deep(ul li) {
+  margin-bottom: 4px;
+}
+
+.message-text :deep(ul li:last-child) {
+  margin-bottom: 0;
+}
+
+.message-text :deep(ul li p),
+.message-text :deep(ol li p) {
+  margin: 0;
+  padding: 0;
 }
 
 .message-text :deep(p) {

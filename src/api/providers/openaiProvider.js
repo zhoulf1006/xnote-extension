@@ -86,20 +86,80 @@ export class OpenAIProvider {
 
       return completion;
     } catch (error) {
-      // Enhance error message with provider context
+      // Try to extract error message from response body
+      let errorMessage = error.message || 'Unknown error occurred';
+      let apiErrorDetails = null;
+
+      // Check if error has response data
+      if (error.response) {
+        try {
+          // For OpenAI SDK errors, the response might be in different places
+          const responseData = error.response.data || error.response.body || error.response;
+
+          if (typeof responseData === 'string') {
+            // Try to parse as JSON
+            apiErrorDetails = JSON.parse(responseData);
+          } else if (typeof responseData === 'object') {
+            apiErrorDetails = responseData;
+          }
+
+          // Extract message from parsed response
+          if (apiErrorDetails?.message) {
+            errorMessage = apiErrorDetails.message;
+          } else if (apiErrorDetails?.error?.message) {
+            errorMessage = apiErrorDetails.error.message;
+          }
+        } catch (parseError) {
+          // If parsing fails, try to extract error from error.message
+          // OpenAI SDK might include the response body in the error message
+          if (error.message && error.message.includes('{')) {
+            const jsonMatch = error.message.match(/\{.*\}/s);
+            if (jsonMatch) {
+              try {
+                const parsed = JSON.parse(jsonMatch[0]);
+                if (parsed.message) {
+                  errorMessage = parsed.message;
+                  apiErrorDetails = parsed;
+                }
+              } catch (e) {
+                // Ignore parse error, use original message
+              }
+            }
+          }
+        }
+      }
+
+      // Handle 401 errors specifically
       if (error.status === 401) {
         const providerName = this.config.name || 'OpenAI';
-        const enhancedError = new Error(`401 Authentication Fails, Your api key: ${error.message?.split(':')[1]?.trim() || 'unknown'} is invalid`);
+        const enhancedError = new Error(
+          errorMessage.includes('token') || errorMessage.includes('expired') || errorMessage.includes('invalid')
+            ? errorMessage
+            : `401 Authentication Failed: ${errorMessage}`
+        );
         enhancedError.originalError = error;
         enhancedError.provider = providerName.toLowerCase();
+        enhancedError.status = 401;
+        enhancedError.apiErrorDetails = apiErrorDetails;
+        throw enhancedError;
+      }
+
+      // Handle 400 errors (Bad Request)
+      if (error.status === 400) {
+        const enhancedError = new Error(errorMessage);
+        enhancedError.originalError = error;
+        enhancedError.provider = this.config.name?.toLowerCase() || 'openai';
+        enhancedError.status = 400;
+        enhancedError.apiErrorDetails = apiErrorDetails;
         throw enhancedError;
       }
 
       // Re-throw other errors with additional context
-      const enhancedError = new Error(error.message || 'Unknown error occurred');
+      const enhancedError = new Error(errorMessage);
       enhancedError.originalError = error;
       enhancedError.provider = this.config.name?.toLowerCase() || 'openai';
       enhancedError.status = error.status;
+      enhancedError.apiErrorDetails = apiErrorDetails;
       throw enhancedError;
     }
   }
