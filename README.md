@@ -126,9 +126,9 @@ pnpm run build
 - Navigate to `chrome://extensions/`
 - Enable "Developer mode"
 - Click "Load unpacked"
-- Select the project folder (contains manifest.json)
+- Select the `dist` folder after build in the project folder
 
-3. **Access the extension**
+1. **Access the extension**
 - Click the XNote icon in toolbar
 - Use keyboard shortcut: `Ctrl+G` (Windows/Linux) or `Cmd+G` (Mac)
 - Or right-click on any page to access features
