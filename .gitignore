@@ -32,9 +32,6 @@ out/
 extension-*.zip
 xnote-extension-*.zip
 
-# Generated files
-public/icons/icon-*.png
-
 # =====================================
 # Environment & Configuration
 # =====================================

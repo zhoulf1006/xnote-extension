@@ -13,4 +13,5 @@ description: Create a git commit
 ## Your task
 
 Based on the above changes, create a single git commit.
-The commit message should only include the project related info, no "Generated with" or "Co-Authored-By" is allowed.
+- The commit message should only include the project related info, no "Generated with" or "Co-Authored-By" is allowed.
+- The committer should only be the author, don't add Claude as committer.
