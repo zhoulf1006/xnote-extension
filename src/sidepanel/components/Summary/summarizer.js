@@ -7,10 +7,10 @@ export const createSummaryPrompt = (pageData, language = 'English') => {
 
 Your entire response must be formatted using Markdown. The summary must be structured in the following two parts:
 
-## Overall Summary
+## Summary
 Provide a single, 1-2 sentence paragraph that captures the absolute main point, thesis, or conclusion of the text.
 
-## Key Highlights
+## Highlights
 Create a bulleted list of the 3-5 most critical takeaways, key findings, or actionable insights from the article. Focus only on high-level concepts and their implications, not on specific examples, data points, or granular details.
 
 

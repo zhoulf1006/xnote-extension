@@ -2,12 +2,19 @@
   <div class="page-container">
     <div class="header">
       <div class="header-left">
+        <h1>Summary</h1>
         <button class="language-toggle" @click="toggleLanguage">
           <span :class="{ active: selectedLanguage === 'English' }">EN</span>
           <span class="separator">/</span>
           <span :class="{ active: selectedLanguage === 'Chinese' }">中</span>
         </button>
-        <h1>Summary</h1>
+        <button
+          class="action-btn regenerate-btn"
+          @click="regenerateSummary"
+          title="Generate/Regenerate summary"
+        >
+          <i class="fas fa-sync" :class="{ 'fa-spin': isRegenerating }"></i>
+        </button>
       </div>
       <div class="header-actions">
         <button
@@ -110,6 +117,7 @@ const showFavorites = ref(false);
 const showCategoryDialog = ref(false);
 const suggestedCategory = ref({ mainCategory: '', subCategory: '' });
 const existingFolder = ref(null);
+const isRegenerating = ref(false);
 
 // Language state management
 const LANGUAGE_STORAGE_KEY = 'xnote-summary-language';
@@ -127,6 +135,65 @@ const loadLanguagePreference = () => {
 const toggleLanguage = () => {
   selectedLanguage.value = selectedLanguage.value === 'English' ? 'Chinese' : 'English';
   localStorage.setItem(LANGUAGE_STORAGE_KEY, selectedLanguage.value);
+};
+
+// Regenerate summary for current page
+const regenerateSummary = async () => {
+  if (!currentPage.value) {
+    // Try to get content from current active tab
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (tabs[0]) {
+        chrome.scripting.executeScript({
+          target: { tabId: tabs[0].id },
+          func: () => {
+            return {
+              content: document.body.innerText,
+              title: document.title,
+              url: window.location.href
+            };
+          }
+        }, async (results) => {
+          if (results && results[0]?.result) {
+            isRegenerating.value = true;
+            await handleSummaryRequest(results[0].result);
+            isRegenerating.value = false;
+          }
+        });
+      }
+    });
+    return;
+  }
+
+  // If we have currentPage with content, regenerate
+  if (currentPage.value.content) {
+    isRegenerating.value = true;
+    await handleSummaryRequest(currentPage.value);
+    isRegenerating.value = false;
+  } else {
+    // If no content stored, try to get from active tab
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      if (tabs[0] && tabs[0].url === currentPage.value.url) {
+        chrome.scripting.executeScript({
+          target: { tabId: tabs[0].id },
+          func: () => {
+            return {
+              content: document.body.innerText,
+              title: document.title,
+              url: window.location.href
+            };
+          }
+        }, async (results) => {
+          if (results && results[0]?.result) {
+            isRegenerating.value = true;
+            await handleSummaryRequest(results[0].result);
+            isRegenerating.value = false;
+          }
+        });
+      } else {
+        alert('Please navigate to the original webpage to regenerate the summary');
+      }
+    });
+  }
 };
 
 // Use computed to safely access Google Drive store
@@ -227,9 +294,10 @@ const saveSummary = (pageData) => {
 const handleSummaryRequest = async (pageData) => {
   currentPage.value = {
     url: pageData.url,
-    title: pageData.title
+    title: pageData.title,
+    content: pageData.content // Store content for potential regeneration
   };
-  
+
   isStreaming.value = true;
   streamingContent.value = '';
 
@@ -542,20 +610,22 @@ onUnmounted(() => {
 }
 
 .language-toggle {
-  background: #f0f2f5;
+  background: #ffffff;
   border: 1px solid #dee2e6;
-  border-radius: 16px;
-  padding: 4px 12px;
+  border-radius: 8px;
+  padding: 4px 8px;
   font-size: 13px;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
 }
 
 .language-toggle:hover {
-  background: #e9ecef;
+  background: #e7dafd;
+  border-color: #ba92ff;
+  transform: scale(1.05);
 }
 
 .language-toggle span {
@@ -592,6 +662,20 @@ onUnmounted(() => {
 
 .action-btn:hover {
   color: #495057;
+}
+
+.regenerate-btn {
+  margin-left: 2px;
+  color: #10b981;
+}
+
+.regenerate-btn .fa-spin {
+  animation: fa-spin 1s infinite linear;
+}
+
+@keyframes fa-spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 .action-btn.active {
