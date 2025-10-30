@@ -33,7 +33,7 @@ make pack
 - **Manifest V3**: Modern Chrome extension with side panel API
 - **Background Service Worker**: Handles context menus, tab management, and cross-tab communication
 - **Content Script**: Page content extraction and notification system
-- **Side Panel**: Main Vue application accessible via Ctrl/Cmd+B
+- **Side Panel**: Main Vue application accessible via Ctrl/Cmd+G
 
 ### Dual-Mode Development
 - **Extension Mode**: Chrome extension with encrypted storage via Chrome sync API

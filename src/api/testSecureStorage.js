@@ -3,8 +3,7 @@
  * Run this in the browser console to test encryption
  */
 
-import { secureStorageService } from './secureStorageService.js'
-import { STORAGE_KEYS } from './storageService.js'
+import { secureStorageService, STORAGE_KEYS } from './storageService.js'
 
 export async function runSecureStorageTests() {
   console.log('🔐 Running Secure Storage Tests...')

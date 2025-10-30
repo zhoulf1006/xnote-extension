@@ -1,37 +1,5 @@
 import { reactive } from 'vue'
-
-// Initialize IndexedDB
-let db = null
-
-const initDB = () => {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open('xnote-db', 2) // Increment version for new store
-
-    request.onerror = () => reject(request.error)
-    request.onsuccess = () => {
-      db = request.result
-      resolve(db)
-    }
-
-    request.onupgradeneeded = (event) => {
-      db = event.target.result
-
-      // Create chatHistory store if it doesn't exist
-      if (!db.objectStoreNames.contains('chatHistory')) {
-        const store = db.createObjectStore('chatHistory', { keyPath: 'id' })
-        store.createIndex('createdAt', 'createdAt', { unique: false })
-        store.createIndex('updatedAt', 'updatedAt', { unique: false })
-        store.createIndex('isActive', 'isActive', { unique: false })
-      }
-
-      // Keep existing stores (favorites)
-      if (!db.objectStoreNames.contains('favorites')) {
-        const favStore = db.createObjectStore('favorites', { keyPath: 'id' })
-        favStore.createIndex('url', 'url', { unique: true })
-      }
-    }
-  })
-}
+import { getDB } from './dbManager'
 
 // Chat history state
 const state = reactive({
@@ -60,7 +28,7 @@ const generateTitle = (messages) => {
 
 // Load all chats from IndexedDB
 const loadChats = async () => {
-  if (!db) await initDB()
+  const db = await getDB()
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['chatHistory'], 'readonly')
@@ -88,7 +56,7 @@ const loadChats = async () => {
 
 // Create a new chat
 const createNewChat = async (initialMessage = null) => {
-  if (!db) await initDB()
+  const db = await getDB()
 
   // Deactivate current active chat
   if (state.activeChat) {
@@ -124,7 +92,7 @@ const createNewChat = async (initialMessage = null) => {
 
 // Load a specific chat
 const loadChat = async (chatId) => {
-  if (!db) await initDB()
+  const db = await getDB()
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['chatHistory'], 'readonly')
@@ -156,7 +124,7 @@ const loadChat = async (chatId) => {
 
 // Update a chat (title, messages, etc.)
 const updateChat = async (chatId, updates) => {
-  if (!db) await initDB()
+  const db = await getDB()
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['chatHistory'], 'readwrite')
@@ -222,7 +190,7 @@ const saveChatMessages = async (messages) => {
 
 // Delete a chat
 const deleteChat = async (chatId) => {
-  if (!db) await initDB()
+  const db = await getDB()
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['chatHistory'], 'readwrite')
@@ -255,7 +223,7 @@ const updateChatTitle = async (chatId, title) => {
 
 // Clear all chats
 const clearAllChats = async () => {
-  if (!db) await initDB()
+  const db = await getDB()
 
   return new Promise((resolve, reject) => {
     const transaction = db.transaction(['chatHistory'], 'readwrite')
@@ -325,7 +293,6 @@ const migrateFromLocalStorage = async () => {
 const init = async () => {
   state.isLoading = true
   try {
-    await initDB()
     await loadChats()
 
     // Check if we need to migrate from localStorage

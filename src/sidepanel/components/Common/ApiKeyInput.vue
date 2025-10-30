@@ -48,7 +48,7 @@
 
 <script setup>
 import { ref, watch, onMounted } from 'vue';
-import { getSecureValue, isSecureKeyConfigured } from '@/api/secureStorageService';
+import { getSecureValue, isSecureKeyConfigured } from '@/api/storageService';
 
 const props = defineProps({
   id: {

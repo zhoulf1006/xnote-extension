@@ -319,12 +319,10 @@ import {
   STORAGE_KEYS,
   isExtensionMode as checkExtensionMode,
   initializeStorage,
-  checkStorage
+  checkStorage,
+  storeSecureValue,
+  secureStorageService
 } from '@/api/storageService';
-import { 
-  storeSecureValue, 
-  secureStorageService 
-} from '@/api/secureStorageService';
 import Chat from './components/Chat/index.vue';
 import QuickLinks from './components/QuickLinks/index.vue';
 import Translation from './components/Translation/index.vue';
@@ -379,7 +377,7 @@ const loadStoredApiKeys = async () => {
     console.log('Loading stored API keys...');
     
     // Import secure storage service
-    const { getSecureValue } = await import('@/api/secureStorageService');
+    const { getSecureValue } = await import('@/api/storageService');
     
     // Load all API keys in parallel
     const [openaiKey, deepseekKey, geminiKey] = await Promise.all([
@@ -520,11 +518,9 @@ onMounted(async () => {
     // Initialize Google Drive store
     await googleDriveStore.initialize();
     console.log('✅ Google Drive store initialized');
-    
-    // Initialize secure storage
-    await secureStorageService.initialize();
-    
-    // Optionally migrate existing plain text keys to encrypted format
+
+    // Migrate existing plain text keys to encrypted format if encryption is available
+    // (Secure storage is already initialized in initializeStorage)
     if (secureStorageService.encryptionEnabled) {
       console.log('🔐 Encryption available, checking for migration needs...');
       await secureStorageService.migrateToEncrypted();

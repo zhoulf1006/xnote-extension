@@ -1,12 +1,16 @@
 /**
  * Storage service to handle API keys in both Chrome extension storage and local env
+ * Includes secure storage functionality for sensitive data encryption
  */
+
+import encryptionService, { EncryptionService } from './encryptionService.js'
 
 // Constants
 export const STORAGE_KEYS = {
   AZURE_OPENAI_KEY: 'azure_openai_key',
   DEEPSEEK_API_KEY: 'deepseek_api_key',
   GEMINI_API_KEY: 'gemini_api_key',
+  AZURE_SPEECH_KEY: 'azure_speech_key',
   // Google Drive keys
   GOOGLE_DRIVE_CONNECTED: 'google_drive_connected',
   GOOGLE_DRIVE_FOLDER_ID: 'google_drive_folder_id',
@@ -25,7 +29,8 @@ export const STORAGE_KEYS = {
 const ENV_MAP = {
   [STORAGE_KEYS.AZURE_OPENAI_KEY]: 'VITE_AZURE_OPENAI_KEY',
   [STORAGE_KEYS.DEEPSEEK_API_KEY]: 'VITE_DEEPSEEK_API_KEY',
-  [STORAGE_KEYS.GEMINI_API_KEY]: 'VITE_GEMINI_API_KEY'
+  [STORAGE_KEYS.GEMINI_API_KEY]: 'VITE_GEMINI_API_KEY',
+  [STORAGE_KEYS.AZURE_SPEECH_KEY]: 'VITE_AZURE_SPEECH_KEY'
 };
 
 // The main key for storing all API keys in development mode
@@ -416,50 +421,6 @@ export async function removeStoredValue(key) {
  * @returns {Promise<string>} The API key or empty string if allowEmpty is true
  * @throws {Error} If the API key is not configured and allowEmpty is false
  */
-export async function getApiKey(providerConfig, allowEmpty = false) {
-  const mappedKey = mapProviderToStorageKey(providerConfig.name.toLowerCase());
-  
-  // Import secureStorage dynamically to avoid circular dependency
-  let apiKey;
-  try {
-    const { getSecureValue } = await import('./secureStorageService.js');
-    apiKey = await getSecureValue(mappedKey, providerConfig.apiKeyEnv);
-  } catch (error) {
-    console.warn('Secure storage not available, falling back to basic storage:', error);
-    apiKey = await getStoredValue(mappedKey, providerConfig.apiKeyEnv);
-  }
-  
-  // In development mode or if allowEmpty is true, don't throw an error for empty keys
-  if (!isExtensionMode() || allowEmpty) {
-    return apiKey || '';
-  }
-  
-  if (!apiKey) {
-    throw new Error(`API key not found for provider: ${providerConfig.name}. 
-      Configure it in the LLM Provider settings.`);
-  }
-  
-  return apiKey;
-}
-
-/**
- * Maps a provider name to a storage key
- * @param {string} providerName - The name of the provider (lowercase)
- * @returns {string} The storage key
- */
-function mapProviderToStorageKey(providerName) {
-  switch (providerName) {
-    case 'openai':
-      return STORAGE_KEYS.AZURE_OPENAI_KEY;
-    case 'deepseek':
-      return STORAGE_KEYS.DEEPSEEK_API_KEY;
-    case 'gemini':
-      return STORAGE_KEYS.GEMINI_API_KEY;
-    default:
-      return `${providerName}_api_key`;
-  }
-}
-
 /**
  * Debug function to check and log storage status
  * This helps diagnose storage issues in the console
@@ -548,11 +509,16 @@ export async function initializeStorage() {
     initializeDevStorage();
   }
   
+  // Initialize secure storage
+  await secureStorageService.initialize();
+  console.log('✅ Secure storage initialized:', secureStorageService.encryptionEnabled);
+
   // Return information about the storage environment
   return {
     isExtensionURL: isExtUrl,
     extensionMode: isExtensionMode(),
-    storageType: isExtensionMode() ? 'chrome.storage.sync' : 'localStorage'
+    storageType: isExtensionMode() ? 'chrome.storage.sync' : 'localStorage',
+    encryptionEnabled: secureStorageService.encryptionEnabled
   };
 }
 
@@ -585,12 +551,315 @@ async function safeExecuteChromeAPI(apiOperation, maxRetries = 2, delayMs = 250)
   throw new Error(`Chrome API operation failed after ${maxRetries + 1} attempts: ${lastError?.message || 'Unknown error'}`);
 }
 
-// Automatically initialize when imported
-(async function() {
-  try {
-    // Don't await, let it run in the background
-    initializeStorage();
-  } catch (e) {
-    console.error('Error initializing storage service:', e);
+// Initialization moved to App.vue to avoid circular dependency issues
+// initializeStorage() must be called explicitly after all modules are loaded
+
+/**
+ * SecureStorageService handles encrypted storage for sensitive data like API keys.
+ * Falls back to plain storage if encryption is unavailable.
+ * Auto-initializes on first use if not already initialized.
+ */
+class SecureStorageService {
+  constructor() {
+    this.initialized = false
+    this.encryptionEnabled = false
   }
-})(); 
+
+  /**
+   * Initialize the secure storage service
+   */
+  async initialize() {
+    if (this.initialized) return
+
+    try {
+      // Check if encryption is available
+      this.encryptionEnabled = EncryptionService.isAvailable()
+
+      if (this.encryptionEnabled) {
+        // Initialize encryption
+        const success = await encryptionService.initialize()
+        if (!success) {
+          console.warn('Encryption initialization failed, falling back to plain storage')
+          this.encryptionEnabled = false
+        } else {
+          console.log('✅ Secure storage initialized with encryption')
+        }
+      } else {
+        console.warn('⚠️ Web Crypto API not available, using plain storage')
+      }
+
+      this.initialized = true
+    } catch (error) {
+      console.error('Failed to initialize secure storage:', error)
+      this.encryptionEnabled = false
+      this.initialized = true
+    }
+  }
+
+  /**
+   * Store a value securely (encrypted if possible)
+   */
+  async storeSecure(key, value) {
+    await this.initialize()
+
+    try {
+      let valueToStore = value
+
+      // Encrypt the value if encryption is enabled
+      if (this.encryptionEnabled && this.isSensitiveKey(key)) {
+        valueToStore = await encryptionService.encrypt(value)
+        console.log(`🔒 Storing encrypted value for key: ${key}`)
+      } else {
+        console.log(`📝 Storing plain value for key: ${key}`)
+      }
+
+      return await storeValue(key, valueToStore)
+    } catch (error) {
+      console.error(`Failed to store secure value for ${key}:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Retrieve a value securely (decrypted if necessary)
+   */
+  async getSecure(key, envFallback) {
+    await this.initialize()
+
+    try {
+      const storedValue = await getStoredValue(key, envFallback)
+
+      if (!storedValue) {
+        return storedValue
+      }
+
+      // Decrypt the value if encryption is enabled and this is encrypted data
+      if (this.encryptionEnabled && this.isSensitiveKey(key)) {
+        const decryptedValue = await encryptionService.decrypt(storedValue)
+        console.log(`🔓 Retrieved and decrypted value for key: ${key}`)
+        return decryptedValue
+      } else {
+        console.log(`📖 Retrieved plain value for key: ${key}`)
+        return storedValue
+      }
+    } catch (error) {
+      console.error(`Failed to get secure value for ${key}:`, error)
+      throw error
+    }
+  }
+
+  /**
+   * Remove a value securely
+   */
+  async removeSecure(key) {
+    await this.initialize()
+    return await removeStoredValue(key)
+  }
+
+  /**
+   * Check if a key is configured (works with encrypted values)
+   */
+  async isSecureKeyConfigured(key, envFallback) {
+    await this.initialize()
+
+    try {
+      const value = await this.getSecure(key, envFallback)
+      return Boolean(value)
+    } catch (error) {
+      console.warn(`Error checking if key ${key} is configured:`, error)
+      return false
+    }
+  }
+
+  /**
+   * Migrate existing plain text values to encrypted format
+   */
+  async migrateToEncrypted() {
+    if (!this.encryptionEnabled) {
+      console.log('Encryption not available, skipping migration')
+      return { migrated: 0, errors: [] }
+    }
+
+    await this.initialize()
+
+    const results = { migrated: 0, errors: [] }
+
+    console.log('🔄 Starting migration to encrypted storage...')
+
+    // Migrate all sensitive keys
+    for (const [keyName, storageKey] of Object.entries(STORAGE_KEYS)) {
+      if (!this.isSensitiveKey(storageKey)) continue
+
+      try {
+        // Get current value using basic storage
+        const currentValue = await getStoredValue(storageKey)
+
+        if (currentValue && !encryptionService.isEncryptedFormat(currentValue)) {
+          console.log(`🔄 Migrating ${keyName} to encrypted format`)
+
+          // Encrypt and store
+          const encryptedValue = await encryptionService.encrypt(currentValue)
+          await storeValue(storageKey, encryptedValue)
+
+          results.migrated++
+          console.log(`✅ Migrated ${keyName}`)
+        }
+      } catch (error) {
+        console.error(`❌ Failed to migrate ${keyName}:`, error)
+        results.errors.push({ key: keyName, error: error.message })
+      }
+    }
+
+    console.log(`🎉 Migration complete: ${results.migrated} keys migrated, ${results.errors.length} errors`)
+    return results
+  }
+
+  /**
+   * Determine if a storage key contains sensitive data that should be encrypted
+   */
+  isSensitiveKey(key) {
+    const sensitiveKeys = [
+      STORAGE_KEYS.AZURE_OPENAI_KEY,
+      STORAGE_KEYS.DEEPSEEK_API_KEY,
+      STORAGE_KEYS.GEMINI_API_KEY,
+      STORAGE_KEYS.AZURE_SPEECH_KEY
+    ]
+
+    return sensitiveKeys.includes(key)
+  }
+
+  /**
+   * Get encryption status
+   */
+  getEncryptionStatus() {
+    return {
+      initialized: this.initialized,
+      encryptionEnabled: this.encryptionEnabled,
+      encryptionService: encryptionService.getStatus()
+    }
+  }
+
+  /**
+   * Backup all encrypted data (returns encrypted format for safety)
+   */
+  async backupEncryptedData() {
+    await this.initialize()
+
+    const backup = {}
+
+    for (const [keyName, storageKey] of Object.entries(STORAGE_KEYS)) {
+      if (this.isSensitiveKey(storageKey)) {
+        try {
+          // Get encrypted format (don't decrypt for backup)
+          const encryptedValue = await getStoredValue(storageKey)
+          if (encryptedValue) {
+            backup[keyName] = {
+              key: storageKey,
+              encrypted: encryptedValue,
+              isEncrypted: encryptionService.isEncryptedFormat(encryptedValue)
+            }
+          }
+        } catch (error) {
+          console.warn(`Failed to backup ${keyName}:`, error)
+        }
+      }
+    }
+
+    return {
+      version: 1,
+      timestamp: new Date().toISOString(),
+      encryption: this.getEncryptionStatus(),
+      data: backup
+    }
+  }
+
+  /**
+   * Test encryption functionality
+   */
+  async testEncryption() {
+    await this.initialize()
+
+    if (!this.encryptionEnabled) {
+      return { success: false, error: 'Encryption not available' }
+    }
+
+    try {
+      const testValue = 'test-api-key-123'
+      const testKey = 'test_encryption_key'
+
+      // Test encryption/decryption cycle
+      await this.storeSecure(testKey, testValue)
+      const retrieved = await this.getSecure(testKey)
+      await this.removeSecure(testKey)
+
+      if (retrieved === testValue) {
+        return { success: true, message: 'Encryption test passed' }
+      } else {
+        return { success: false, error: 'Decrypted value does not match original' }
+      }
+    } catch (error) {
+      return { success: false, error: error.message }
+    }
+  }
+}
+
+// Create secure storage singleton
+const secureStorageService = new SecureStorageService()
+
+// Export secure storage functions
+export const storeSecureValue = (key, value) => secureStorageService.storeSecure(key, value)
+export const getSecureValue = (key, envFallback) => secureStorageService.getSecure(key, envFallback)
+export const removeSecureValue = (key) => secureStorageService.removeSecure(key)
+export const isSecureKeyConfigured = (key, envFallback) => secureStorageService.isSecureKeyConfigured(key, envFallback)
+
+// Export the singleton for direct access
+export { secureStorageService }
+
+/**
+ * Maps a provider name to a storage key
+ * @param {string} providerName - The name of the provider (lowercase)
+ * @returns {string} The storage key
+ */
+function mapProviderToStorageKey(providerName) {
+  switch (providerName) {
+    case 'openai':
+      return STORAGE_KEYS.AZURE_OPENAI_KEY;
+    case 'deepseek':
+      return STORAGE_KEYS.DEEPSEEK_API_KEY;
+    case 'gemini':
+      return STORAGE_KEYS.GEMINI_API_KEY;
+    default:
+      return `${providerName}_api_key`;
+  }
+}
+
+/**
+ * Gets the API key for a provider
+ * @param {Object} providerConfig - The provider configuration
+ * @param {boolean} allowEmpty - Whether to allow empty API keys (default: false)
+ * @returns {Promise<string>} The API key
+ */
+export async function getApiKey(providerConfig, allowEmpty = false) {
+  const mappedKey = mapProviderToStorageKey(providerConfig.name.toLowerCase());
+
+  // Use local getSecureValue function (no import needed)
+  let apiKey;
+  try {
+    apiKey = await getSecureValue(mappedKey, providerConfig.apiKeyEnv);
+  } catch (error) {
+    console.warn('Secure storage not available, falling back to basic storage:', error);
+    apiKey = await getStoredValue(mappedKey, providerConfig.apiKeyEnv);
+  }
+
+  // In development mode or if allowEmpty is true, don't throw an error for empty keys
+  if (!isExtensionMode() || allowEmpty) {
+    return apiKey || '';
+  }
+
+  if (!apiKey) {
+    throw new Error(`API key not found for provider: ${providerConfig.name}.
+      Configure it in the LLM Provider settings.`);
+  }
+
+  return apiKey;
+} 
