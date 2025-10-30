@@ -1,7 +1,14 @@
 <template>
   <div class="page-container">
     <div class="header">
-      <h1>Summary</h1>
+      <div class="header-left">
+        <button class="language-toggle" @click="toggleLanguage">
+          <span :class="{ active: selectedLanguage === 'English' }">EN</span>
+          <span class="separator">/</span>
+          <span :class="{ active: selectedLanguage === 'Chinese' }">中</span>
+        </button>
+        <h1>Summary</h1>
+      </div>
       <div class="header-actions">
         <button
           v-if="currentPage?.summary"
@@ -103,6 +110,24 @@ const showFavorites = ref(false);
 const showCategoryDialog = ref(false);
 const suggestedCategory = ref({ mainCategory: '', subCategory: '' });
 const existingFolder = ref(null);
+
+// Language state management
+const LANGUAGE_STORAGE_KEY = 'xnote-summary-language';
+const selectedLanguage = ref('English');
+
+// Load saved language preference
+const loadLanguagePreference = () => {
+  const saved = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+  if (saved === 'Chinese' || saved === 'English') {
+    selectedLanguage.value = saved;
+  }
+};
+
+// Toggle language and save preference
+const toggleLanguage = () => {
+  selectedLanguage.value = selectedLanguage.value === 'English' ? 'Chinese' : 'English';
+  localStorage.setItem(LANGUAGE_STORAGE_KEY, selectedLanguage.value);
+};
 
 // Use computed to safely access Google Drive store
 const isGoogleDriveConnected = computed(() => {
@@ -209,13 +234,13 @@ const handleSummaryRequest = async (pageData) => {
   streamingContent.value = '';
 
   try {
-    const prompt = createSummaryPrompt(pageData);
+    const messages = createSummaryPrompt(pageData, selectedLanguage.value);
     if (!llmConfigStore.selectedProvider) {
       throw new Error('No LLM provider selected');
     }
 
     await streamSummary(
-      prompt,
+      messages,
       // Handle chunks
       async (chunk) => {
         streamingContent.value += chunk;
@@ -395,6 +420,9 @@ const handleCategoryConfirm = async (category) => {
 };
 
 onMounted(async () => {
+  // Load language preference
+  loadLanguagePreference();
+
   // Load mappings if store is initialized
   if (mappingsStore) {
     try {
@@ -505,6 +533,47 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.language-toggle {
+  background: #f0f2f5;
+  border: 1px solid #dee2e6;
+  border-radius: 16px;
+  padding: 4px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.language-toggle:hover {
+  background: #e9ecef;
+}
+
+.language-toggle span {
+  transition: all 0.2s ease;
+}
+
+.language-toggle span.active {
+  color: #007bff;
+  font-weight: 600;
+}
+
+.language-toggle span:not(.active) {
+  color: #6c757d;
+}
+
+.language-toggle .separator {
+  color: #adb5bd;
+  margin: 0 2px;
 }
 
 .header-actions {
