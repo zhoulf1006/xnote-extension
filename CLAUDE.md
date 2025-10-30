@@ -212,3 +212,4 @@ Key directories and their purposes:
 3. **Test all providers**: Use the LLM Test tab to verify configurations
 4. **Check storage**: Verify encrypted storage is working properly
 5. **Test context menus**: Right-click to test summary and save features
+- Create test files or scripts under tests folder.

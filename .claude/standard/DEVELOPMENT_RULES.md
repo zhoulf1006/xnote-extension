@@ -1,6 +1,6 @@
-# HN Sidebar Vue - Development Rules & Standards
+# XNote - Development Rules & Standards
 
-This document defines the development requirements, patterns, and standards for the HN Sidebar Vue Chrome extension project.
+This document defines the development requirements, patterns, and standards for the XNote Chrome extension project.
 
 ## 🛠️ Development Environment
 

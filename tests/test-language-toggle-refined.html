@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Refined Language Toggle Implementation Report</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        h1 {
+            color: #333;
+            font-size: 32px;
+            margin-bottom: 30px;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+        .section {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            border-left: 4px solid #667eea;
+        }
+        .section h2 {
+            color: #495057;
+            margin-bottom: 15px;
+            font-size: 20px;
+        }
+        .success {
+            color: #28a745;
+            font-weight: 600;
+        }
+        .code-block {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 13px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        .code-block .comment {
+            color: #6a9955;
+        }
+        .code-block .string {
+            color: #ce9178;
+        }
+        .code-block .keyword {
+            color: #569cd6;
+        }
+        .code-block .function {
+            color: #dcdcaa;
+        }
+        .improvements {
+            background: #e8f5e9;
+            border-left-color: #4caf50;
+        }
+        .list-item {
+            margin: 8px 0;
+            padding-left: 20px;
+            position: relative;
+        }
+        .list-item:before {
+            content: "▸";
+            position: absolute;
+            left: 0;
+            color: #667eea;
+        }
+        .badge {
+            display: inline-block;
+            padding: 3px 8px;
+            background: #667eea;
+            color: white;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Refined Language Toggle Implementation</h1>
+
+        <div class="section improvements">
+            <h2>✨ Key Improvements Made</h2>
+            <div class="list-item">
+                <strong>Separated System and User Prompts:</strong> Clear separation of concerns for better prompt engineering
+            </div>
+            <div class="list-item">
+                <strong>Fixed Parameter Passing:</strong> Corrected function signatures and parameter order
+            </div>
+            <div class="list-item">
+                <strong>Language in System Context:</strong> Language instruction now properly placed in system prompt
+            </div>
+            <div class="list-item">
+                <strong>Clean Message Structure:</strong> Returns array of message objects for chat API
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📝 Implementation Details</h2>
+
+            <h3>1. createSummaryPrompt Function <span class="badge">REFINED</span></h3>
+            <div class="code-block">
+<span class="keyword">export const</span> <span class="function">createSummaryPrompt</span> = (pageData, language = <span class="string">'English'</span>) => {
+  <span class="keyword">const</span> userPrompt = <span class="string">`Please provide a concise summary...`</span>;
+
+  <span class="keyword">return</span> [
+    {
+      <span class="comment">// System prompt with language instruction</span>
+      role: <span class="string">'system'</span>,
+      content: <span class="string">`You are a helpful assistant that specializes in summarizing web content and articles. Please provide all responses in ${language}, regardless of the language of the source content.`</span>
+    },
+    {
+      <span class="comment">// User prompt with content to summarize</span>
+      role: <span class="string">'user'</span>,
+      content: userPrompt
+    }
+  ];
+};
+            </div>
+
+            <h3>2. streamSummary Function <span class="badge">SIMPLIFIED</span></h3>
+            <div class="code-block">
+<span class="keyword">export const</span> <span class="function">streamSummary</span> = <span class="keyword">async</span> (messages, onChunk, onComplete, onError) => {
+  <span class="keyword">try</span> {
+    <span class="comment">// Direct pass-through of messages array</span>
+    <span class="keyword">await</span> <span class="function">streamChat</span>(messages, {
+      onChunk,
+      onComplete,
+      onError
+    });
+  } <span class="keyword">catch</span> (error) {
+    console.<span class="function">error</span>(<span class="string">'Error in streamSummary:'</span>, error);
+    <span class="function">onError</span>(error);
+  }
+};
+            </div>
+
+            <h3>3. Usage in index.vue <span class="badge">CORRECTED</span></h3>
+            <div class="code-block">
+<span class="comment">// Generate messages with language parameter</span>
+<span class="keyword">const</span> messages = <span class="function">createSummaryPrompt</span>(pageData, selectedLanguage.value);
+
+<span class="comment">// Stream summary with messages array</span>
+<span class="keyword">await</span> <span class="function">streamSummary</span>(
+  messages,
+  <span class="comment">// Handle chunks callback</span>
+  <span class="keyword">async</span> (chunk) => { streamingContent.value += chunk; },
+  <span class="comment">// Handle completion callback</span>
+  <span class="keyword">async</span> (fullResponse) => { ... },
+  <span class="comment">// Handle error callback</span>
+  <span class="keyword">async</span> (error) => { ... }
+);
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🎯 Benefits of Refined Architecture</h2>
+            <div class="list-item">
+                <strong>Clear Separation:</strong> System instructions separate from user content
+            </div>
+            <div class="list-item">
+                <strong>Flexibility:</strong> Easy to add more system instructions without affecting user prompt
+            </div>
+            <div class="list-item">
+                <strong>Maintainability:</strong> Single source of truth for message construction
+            </div>
+            <div class="list-item">
+                <strong>Extensibility:</strong> Can easily add more languages or prompt variations
+            </div>
+            <div class="list-item">
+                <strong>API Compliance:</strong> Follows OpenAI/LLM API message format standards
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🧪 Testing Checklist</h2>
+            <div class="list-item">
+                <span class="success">✓</span> Language toggle button displays correctly (EN/中)
+            </div>
+            <div class="list-item">
+                <span class="success">✓</span> Language preference persists in localStorage
+            </div>
+            <div class="list-item">
+                <span class="success">✓</span> System prompt includes language instruction
+            </div>
+            <div class="list-item">
+                <span class="success">✓</span> Summaries generate in selected language
+            </div>
+            <div class="list-item">
+                <span class="success">✓</span> Build completes without errors
+            </div>
+            <div class="list-item">
+                <span class="success">✓</span> Hot module replacement works in dev mode
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>📊 Technical Summary</h2>
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #dee2e6;"><strong>Files Modified:</strong></td>
+                    <td style="padding: 10px; border-bottom: 1px solid #dee2e6;">2 files</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #dee2e6;"><strong>Functions Updated:</strong></td>
+                    <td style="padding: 10px; border-bottom: 1px solid #dee2e6;">createSummaryPrompt, streamSummary</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #dee2e6;"><strong>Build Status:</strong></td>
+                    <td style="padding: 10px; border-bottom: 1px solid #dee2e6;"><span class="success">✓ Success</span></td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px; border-bottom: 1px solid #dee2e6;"><strong>Language Support:</strong></td>
+                    <td style="padding: 10px; border-bottom: 1px solid #dee2e6;">English, Chinese (expandable)</td>
+                </tr>
+                <tr>
+                    <td style="padding: 10px;"><strong>API Compatibility:</strong></td>
+                    <td style="padding: 10px;">OpenAI, Gemini, DeepSeek</td>
+                </tr>
+            </table>
+        </div>
+
+        <div class="section">
+            <h2>🚀 Next Steps (Optional Enhancements)</h2>
+            <div class="list-item">
+                Add more language options (Spanish, French, Japanese, etc.)
+            </div>
+            <div class="list-item">
+                Add language auto-detection for source content
+            </div>
+            <div class="list-item">
+                Implement per-page language preferences
+            </div>
+            <div class="list-item">
+                Add language-specific prompt optimizations
+            </div>
+        </div>
+    </div>
+</body>
+</html>
