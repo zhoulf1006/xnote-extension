@@ -7,7 +7,7 @@
         Screen Capture
       </h2>
       <p class="capture-description">
-        Capture any area of the screen and extract text using AI
+        Capture screen and extract text with LLM
       </p>
     </div>
 
@@ -340,14 +340,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 <style scoped>
 .screen-capture {
-  padding: 16px;
+  padding: 12px;
   height: 100%;
   overflow-y: auto;
   background: #f8f9fa;
 }
 
 .capture-header {
-  margin-bottom: 24px;
+  margin-bottom: 8px;
   text-align: center;
 }
 

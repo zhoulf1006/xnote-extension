@@ -108,8 +108,8 @@ onMounted(() => {
 
 .capture-button {
   width: 100%;
-  padding: 14px 20px;
-  background: linear-gradient(135deg, #8e72be 0%, #ba79d5 100%);
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #9b81c4 0%, #bb88d1 100%);
   color: white;
   border: none;
   border-radius: 8px;
@@ -120,18 +120,18 @@ onMounted(() => {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(103, 58, 183, 0.3);
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 8px rgba(103, 58, 183, 0.3);
 }
 
 .capture-button:hover:not(:disabled) {
-  background: linear-gradient(135deg, #8e72be 0%, #ba79d5 100%);
-  transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(103, 58, 183, 0.4);
+  background: linear-gradient(135deg, #9d83c6 0%, #b483c9 100%);
+  transform: scale(1.03);
+  box-shadow: 0 4px 8px rgba(103, 58, 183, 0.4);
 }
 
 .capture-button:active:not(:disabled) {
-  transform: translateY(0);
+  transform: scale(1.03);
   box-shadow: 0 2px 8px rgba(103, 58, 183, 0.3);
 }
 
@@ -180,8 +180,8 @@ onMounted(() => {
 
 /* Prompt Section */
 .prompt-section {
-  margin-top: 20px;
-  padding: 16px;
+  margin-top: 16px;
+  padding: 12px;
   background: white;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0,0,0,0.05);
