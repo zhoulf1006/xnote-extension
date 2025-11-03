@@ -13,6 +13,37 @@
       </div>
     </div>
 
+    <!-- Search filter (only shown in view mode) -->
+    <div v-if="!editMode" class="search-container">
+      <i class="fas fa-search search-icon"></i>
+      <input
+        v-model="searchQuery"
+        type="text"
+        placeholder="Search links..."
+        class="search-input"
+        @input="onSearchInput"
+      />
+      <button
+        v-if="searchQuery"
+        @click="clearSearch"
+        class="clear-btn"
+        title="Clear search"
+      >
+        <i class="fas fa-times"></i>
+      </button>
+    </div>
+
+    <!-- Search results summary -->
+    <div v-if="searchQuery && !loading" class="search-summary">
+      <span v-if="searchResultsCount > 0">
+        Found {{ searchResultsCount }} {{ searchResultsCount === 1 ? 'link' : 'links' }}
+        in {{ searchResultsCategoryCount }} {{ searchResultsCategoryCount === 1 ? 'category' : 'categories' }}
+      </span>
+      <span v-else class="no-results">
+        No links found matching "{{ searchQuery }}"
+      </span>
+    </div>
+
     <div v-if="error" class="error">
       {{ error }}
     </div>
@@ -22,7 +53,7 @@
     </div>
 
     <div v-else class="seglinks-container">
-      <div v-for="model in segLinksData?.models"
+      <div v-for="model in filteredModels"
            :key="model.name"
            class="seg-model">
         <div class="seg-model-header"
@@ -189,6 +220,12 @@ const {
   editingLink,
   editingLinkData,
 
+  // Search State
+  searchQuery,
+  filteredModels,
+  searchResultsCount,
+  searchResultsCategoryCount,
+
   // UI Methods
   toggleModel,
   isCategoryExpanded,
@@ -216,6 +253,10 @@ const {
   saveCurrentPageToCategory,
   showSavePageDialog,
   savePageToCategory,
+
+  // Search Methods
+  onSearchInput,
+  clearSearch,
 
   // Initialization
   initialize

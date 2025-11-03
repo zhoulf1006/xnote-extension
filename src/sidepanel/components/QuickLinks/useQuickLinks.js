@@ -3,7 +3,7 @@
  * Provides reactive state management and methods for the QuickLinks component
  */
 
-import { ref, reactive, nextTick, onMounted } from 'vue'
+import { ref, reactive, nextTick, onMounted, computed } from 'vue'
 import quickLinksService from './quickLinksService.js'
 
 export function useQuickLinks() {
@@ -27,6 +27,9 @@ export function useQuickLinks() {
   const newLink = reactive({ name: '', url: '' })
   const editingLink = reactive({})
   const editingLinkData = reactive({ name: '', url: '' })
+
+  // Search state
+  const searchQuery = ref('')
 
   // UI Methods - Accordion behavior (only one category expanded at a time)
   const toggleModel = (modelName) => {
@@ -283,8 +286,8 @@ export function useQuickLinks() {
   }
 
   // Initialize component
-  const initialize = () => {
-    loadSegLinks()
+  const initialize = async () => {
+    await loadSegLinks()
     
     // Listen for messages from background script
     if (typeof chrome !== 'undefined' && chrome.runtime) {
@@ -296,6 +299,76 @@ export function useQuickLinks() {
       })
     }
   }
+
+  // Computed property for filtered models using Vue-native search
+  const filteredModels = computed(() => {
+    // If no search query, return all categories
+    if (!searchQuery.value || searchQuery.value.trim() === '') {
+      return segLinksData.value?.models || []
+    }
+
+    // Normalize search query for case-insensitive matching
+    const query = searchQuery.value.toLowerCase().trim()
+
+    // Filter categories and their links
+    const filtered = []
+
+    segLinksData.value?.models?.forEach(category => {
+      // Check if category name matches
+      const categoryMatches = category.name.toLowerCase().includes(query)
+
+      // Filter links that match in name or URL
+      const matchingLinks = category.links?.filter(link => {
+        const nameMatches = link.name.toLowerCase().includes(query)
+        const urlMatches = link.url.toLowerCase().includes(query)
+        return nameMatches || urlMatches
+      }) || []
+
+      // Include category if it matches OR has matching links
+      if (categoryMatches || matchingLinks.length > 0) {
+        filtered.push({
+          name: category.name,
+          links: categoryMatches ? category.links : matchingLinks,
+          createdAt: category.createdAt
+        })
+      }
+    })
+
+    // Auto-expand first category with results
+    if (filtered.length > 0 && searchQuery.value) {
+      expandedCategory.value = filtered[0].name
+    }
+
+    return filtered
+  })
+
+  // Computed property for search results count
+  const searchResultsCount = computed(() => {
+    if (!searchQuery.value) return 0
+    return filteredModels.value.reduce((total, category) => {
+      return total + (category.links?.length || 0)
+    }, 0)
+  })
+
+  // Computed property for category count with results
+  const searchResultsCategoryCount = computed(() => {
+    if (!searchQuery.value) return 0
+    return filteredModels.value.length
+  })
+
+  // Search methods
+  const onSearchInput = () => {
+    // Auto-expand first category when searching
+    if (searchQuery.value && filteredModels.value.length > 0) {
+      expandedCategory.value = filteredModels.value[0].name
+    }
+  }
+
+  const clearSearch = () => {
+    searchQuery.value = ''
+    expandedCategory.value = null // Reset accordion state
+  }
+
 
   return {
     // State
@@ -312,6 +385,12 @@ export function useQuickLinks() {
     newLink,
     editingLink,
     editingLinkData,
+
+    // Search State
+    searchQuery,
+    filteredModels,
+    searchResultsCount,
+    searchResultsCategoryCount,
 
     // UI Methods
     toggleModel,
@@ -340,6 +419,10 @@ export function useQuickLinks() {
     saveCurrentPageToCategory,
     showSavePageDialog,
     savePageToCategory,
+
+    // Search Methods
+    onSearchInput,
+    clearSearch,
 
     // Initialization
     initialize
