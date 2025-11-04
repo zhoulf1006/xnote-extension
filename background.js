@@ -210,6 +210,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
             files: ['src/content-scripts/screenshot-overlay.js']
           });
 
+          // After injection, send message to focus the overlay
+          setTimeout(() => {
+            chrome.tabs.sendMessage(tabs[0].id, {
+              action: 'focusScreenshotOverlay'
+            }).catch(() => {
+              // Ignore errors if message fails (overlay might already be removed)
+            });
+          }, 100);
+
           sendResponse({ success: true });
         } catch (error) {
           console.error('Error injecting screenshot overlay:', error);

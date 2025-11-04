@@ -97,7 +97,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { useLLMConfigStore } from '@/stores/llmConfig';
 import { llmService } from '@/api/llm';
 import { llmProviders } from '@/config/llmProviders';
@@ -149,6 +149,62 @@ function openLLMConfig() {
 function handlePromptSelected(prompt) {
   selectedPrompt.value = prompt;
 }
+
+// Handle ESC key press in extension context (fallback handler)
+function handleExtensionEscape(e) {
+  if (e.key === 'Escape' && isCapturing.value) {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Cancel the capture
+    cancelScreenshotCapture();
+  }
+}
+
+// Cancel the screenshot capture from extension side
+async function cancelScreenshotCapture() {
+  try {
+    // Send cleanup message to content script to remove overlay
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    if (tabs[0]) {
+      try {
+        await chrome.tabs.sendMessage(tabs[0].id, {
+          action: 'cleanupScreenshotOverlay'
+        });
+      } catch (err) {
+        // Overlay might already be removed, ignore error
+        console.log('Overlay cleanup message failed (might already be removed)');
+      }
+    }
+
+    // Reset state
+    isCapturing.value = false;
+    error.value = 'Screenshot capture cancelled';
+  } catch (err) {
+    console.error('Error cancelling capture:', err);
+    isCapturing.value = false;
+  }
+}
+
+// Watch isCapturing and manage keyboard listener
+watch(isCapturing, (newValue) => {
+  if (newValue) {
+    // Add ESC listener when capturing starts
+    // Use capture phase to get events before other handlers
+    window.addEventListener('keydown', handleExtensionEscape, true);
+    document.addEventListener('keydown', handleExtensionEscape, true);
+  } else {
+    // Remove ESC listener when capturing ends
+    window.removeEventListener('keydown', handleExtensionEscape, true);
+    document.removeEventListener('keydown', handleExtensionEscape, true);
+  }
+});
+
+// Clean up listeners on component unmount
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleExtensionEscape, true);
+  document.removeEventListener('keydown', handleExtensionEscape, true);
+});
 
 async function startCapture() {
   try {

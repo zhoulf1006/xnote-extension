@@ -16,6 +16,7 @@
   let startY = 0;
   let isSelecting = false;
   let dimensionDisplay = null;
+  let previousFocus = null; // Store previously focused element
 
   /**
    * Create and show the screenshot overlay
@@ -27,6 +28,7 @@
     // Create overlay container
     overlay = document.createElement('div');
     overlay.id = 'xnote-screenshot-overlay';
+    overlay.setAttribute('tabindex', '-1'); // Make overlay focusable
     overlay.style.cssText = `
       position: fixed;
       top: 0;
@@ -97,11 +99,37 @@
     overlay.appendChild(instructions);
     document.body.appendChild(overlay);
 
+    // Store previous focus
+    previousFocus = document.activeElement;
+
+    // Multi-step focus strategy to ensure page has focus
+    // Step 1: Make body focusable and focus it to ensure we're in page context
+    if (document.body.tabIndex < 0) {
+      document.body.tabIndex = -1;
+    }
+    document.body.focus();
+
+    // Step 2: Use requestAnimationFrame to ensure DOM is painted
+    requestAnimationFrame(() => {
+      // Step 3: Focus overlay
+      overlay.focus();
+
+      // Step 4: Verify and retry if needed
+      setTimeout(() => {
+        if (document.activeElement !== overlay) {
+          // Fallback: Try click to force focus
+          overlay.click();
+          overlay.focus();
+        }
+      }, 50);
+    });
+
     // Add event listeners
     overlay.addEventListener('mousedown', handleMouseDown);
     overlay.addEventListener('mousemove', handleMouseMove);
     overlay.addEventListener('mouseup', handleMouseUp);
-    document.addEventListener('keydown', handleKeyDown);
+    // Use capture phase for keydown to intercept before page scripts
+    overlay.addEventListener('keydown', handleKeyDown, true);
 
     // Prevent context menu
     overlay.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -173,6 +201,10 @@
 
     // Minimum size check (at least 10x10 pixels)
     if (width < 10 || height < 10) {
+      // Notify background script that capture was cancelled (selection too small)
+      chrome.runtime.sendMessage({
+        action: 'screenshotCancelled'
+      });
       removeOverlay();
       return;
     }
@@ -218,6 +250,7 @@
     if (e.key === 'Escape' || e.keyCode === 27) {
       e.preventDefault();
       e.stopPropagation();
+      e.stopImmediatePropagation(); // Prevent any other handlers from running
 
       // Notify background script of cancellation
       chrome.runtime.sendMessage({
@@ -260,13 +293,24 @@
       overlay.removeEventListener('mousedown', handleMouseDown);
       overlay.removeEventListener('mousemove', handleMouseMove);
       overlay.removeEventListener('mouseup', handleMouseUp);
-      document.removeEventListener('keydown', handleKeyDown);
+      // Remove with capture flag to match how it was added
+      overlay.removeEventListener('keydown', handleKeyDown, true);
+
+      // Restore previous focus
+      if (previousFocus && previousFocus.focus) {
+        try {
+          previousFocus.focus();
+        } catch (e) {
+          // Element may no longer exist or be focusable
+        }
+      }
 
       // Remove overlay
       overlay.remove();
       overlay = null;
       selectionBox = null;
       dimensionDisplay = null;
+      previousFocus = null;
     }
 
     // Reset state
@@ -277,10 +321,21 @@
   // Initialize overlay
   createOverlay();
 
-  // Listen for cleanup message
+  // Listen for messages
   chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     if (request.action === 'cleanupScreenshotOverlay') {
       removeOverlay();
+      sendResponse({ success: true });
+    }
+    // Handle focus request from background script
+    else if (request.action === 'focusScreenshotOverlay') {
+      if (overlay) {
+        // Focus body first to ensure we're in page context
+        document.body.focus();
+        setTimeout(() => {
+          overlay.focus();
+        }, 10);
+      }
       sendResponse({ success: true });
     }
   });
