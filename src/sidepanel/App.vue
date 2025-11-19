@@ -70,13 +70,89 @@
             <ApiKeyInput
               id="openai-key"
               label="OpenAI API Key"
-              :storage-key="STORAGE_KEYS.AZURE_OPENAI_KEY"
-              env-fallback="VITE_AZURE_OPENAI_KEY"
+              :storage-key="STORAGE_KEYS.OPENAI_API_KEY"
+              env-fallback="VITE_OPENAI_API_KEY"
               placeholder="Enter your OpenAI API key"
               v-model:api-key="apiKeys.openai"
               @configuration-changed="providerKeyStatus.openai = $event"
               :key="'openai-' + configModalKey"
             />
+          </div>
+
+          <div v-show="selectedProvider === 'customized'">
+            <div class="customized-provider-config">
+              <div class="custom-url-section">
+                <label for="custom-base-url">Base URL Endpoint</label>
+                <input
+                  id="custom-base-url"
+                  type="url"
+                  v-model="customConfig.baseURL"
+                  placeholder="https://api.example.com/v1"
+                  class="custom-url-input"
+                />
+                <p class="field-hint">Enter the base URL for your OpenAI-compatible API endpoint</p>
+              </div>
+
+              <ApiKeyInput
+                id="customized-key"
+                label="API Key"
+                :storage-key="STORAGE_KEYS.CUSTOMIZED_API_KEY"
+                env-fallback="VITE_CUSTOMIZED_API_KEY"
+                placeholder="Enter your API key"
+                v-model:api-key="apiKeys.customized"
+                @configuration-changed="providerKeyStatus.customized = $event"
+                :key="'customized-' + configModalKey"
+              />
+
+              <div class="capabilities-section">
+                <h4>Capabilities Configuration</h4>
+
+                <!-- Chat capability -->
+                <div class="capability-item">
+                  <label class="capability-toggle">
+                    <input type="checkbox" v-model="customConfig.capabilities.chat.enabled">
+                    <span>Chat</span>
+                  </label>
+                  <input
+                    v-if="customConfig.capabilities.chat.enabled"
+                    type="text"
+                    v-model="customConfig.capabilities.chat.model"
+                    placeholder="Model name (e.g., gpt-4o)"
+                    class="model-input"
+                  />
+                </div>
+
+                <!-- Vision capability -->
+                <div class="capability-item">
+                  <label class="capability-toggle">
+                    <input type="checkbox" v-model="customConfig.capabilities.vision.enabled">
+                    <span>Vision (Image Analysis)</span>
+                  </label>
+                  <input
+                    v-if="customConfig.capabilities.vision.enabled"
+                    type="text"
+                    v-model="customConfig.capabilities.vision.model"
+                    placeholder="Model name (e.g., gpt-4o)"
+                    class="model-input"
+                  />
+                </div>
+
+                <!-- Speech capability -->
+                <div class="capability-item">
+                  <label class="capability-toggle">
+                    <input type="checkbox" v-model="customConfig.capabilities.speech.enabled">
+                    <span>Speech (TTS)</span>
+                  </label>
+                  <input
+                    v-if="customConfig.capabilities.speech.enabled"
+                    type="text"
+                    v-model="customConfig.capabilities.speech.model"
+                    placeholder="Model name (e.g., tts-1)"
+                    class="model-input"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
           
           <div v-show="selectedProvider === 'deepseek'">
@@ -361,36 +437,61 @@ const hasLocationChanges = computed(() => {
 const apiKeys = ref({
   openai: '',
   deepseek: '',
-  gemini: ''
+  gemini: '',
+  customized: ''
 });
 
 // Track configuration status for each provider
 const providerKeyStatus = ref({
   openai: null,
   deepseek: null,
-  gemini: null
+  gemini: null,
+  customized: null
+});
+
+// Custom provider configuration
+const customConfig = ref({
+  baseURL: '',
+  capabilities: {
+    chat: { enabled: true, model: 'gpt-4o', endpoint: '/chat/completions' },
+    vision: { enabled: false, model: 'gpt-4o', endpoint: '/chat/completions' },
+    speech: { enabled: false, model: 'tts-1', endpoint: '/audio/speech' }
+  }
 });
 
 // Load stored API keys
 const loadStoredApiKeys = async () => {
   try {
     console.log('Loading stored API keys...');
-    
+
     // Import secure storage service
-    const { getSecureValue } = await import('@/api/storageService');
-    
+    const { getSecureValue, getStoredValue } = await import('@/api/storageService');
+
     // Load all API keys in parallel
-    const [openaiKey, deepseekKey, geminiKey] = await Promise.all([
-      getSecureValue(STORAGE_KEYS.AZURE_OPENAI_KEY, 'VITE_AZURE_OPENAI_KEY'),
+    const [openaiKey, customizedKey, deepseekKey, geminiKey, customizedConfig] = await Promise.all([
+      getSecureValue(STORAGE_KEYS.OPENAI_API_KEY, 'VITE_OPENAI_API_KEY'),
+      getSecureValue(STORAGE_KEYS.CUSTOMIZED_API_KEY, 'VITE_CUSTOMIZED_API_KEY'),
       getSecureValue(STORAGE_KEYS.DEEPSEEK_API_KEY, 'VITE_DEEPSEEK_API_KEY'),
-      getSecureValue(STORAGE_KEYS.GEMINI_API_KEY, 'VITE_GEMINI_API_KEY')
+      getSecureValue(STORAGE_KEYS.GEMINI_API_KEY, 'VITE_GEMINI_API_KEY'),
+      getStoredValue(STORAGE_KEYS.CUSTOMIZED_CONFIG)
     ]);
-    
+
     // Update apiKeys with stored values (show actual values)
     apiKeys.value.openai = openaiKey;
     apiKeys.value.deepseek = deepseekKey;
     apiKeys.value.gemini = geminiKey;
-    
+    apiKeys.value.customized = customizedKey;
+
+    // Load custom configuration if available
+    if (customizedConfig) {
+      try {
+        const config = JSON.parse(customizedConfig);
+        customConfig.value = { ...customConfig.value, ...config };
+      } catch (error) {
+        console.warn('Failed to parse custom configuration:', error);
+      }
+    }
+
     console.log('✅ API keys loaded');
   } catch (error) {
     console.warn('⚠️ Could not load stored API keys:', error);
@@ -672,13 +773,21 @@ const saveConfig = async () => {
     
     // Save API keys if they have values
     if (apiKeys.value.openai && apiKeys.value.openai.trim() !== '') {
-      promises.push(storeSecureValue(STORAGE_KEYS.AZURE_OPENAI_KEY, apiKeys.value.openai));
+      promises.push(storeSecureValue(STORAGE_KEYS.OPENAI_API_KEY, apiKeys.value.openai));
       console.log('  - Saving OpenAI key');
     } else if (apiKeys.value.openai === '') {
-      promises.push(storeSecureValue(STORAGE_KEYS.AZURE_OPENAI_KEY, ''));
+      promises.push(storeSecureValue(STORAGE_KEYS.OPENAI_API_KEY, ''));
       console.log('  - Clearing OpenAI key');
     }
-    
+
+    if (apiKeys.value.customized && apiKeys.value.customized.trim() !== '') {
+      promises.push(storeSecureValue(STORAGE_KEYS.CUSTOMIZED_API_KEY, apiKeys.value.customized));
+      console.log('  - Saving Customized key');
+    } else if (apiKeys.value.customized === '') {
+      promises.push(storeSecureValue(STORAGE_KEYS.CUSTOMIZED_API_KEY, ''));
+      console.log('  - Clearing Customized key');
+    }
+
     if (apiKeys.value.deepseek && apiKeys.value.deepseek.trim() !== '') {
       promises.push(storeSecureValue(STORAGE_KEYS.DEEPSEEK_API_KEY, apiKeys.value.deepseek));
       console.log('  - Saving DeepSeek key');
@@ -686,13 +795,20 @@ const saveConfig = async () => {
       promises.push(storeSecureValue(STORAGE_KEYS.DEEPSEEK_API_KEY, ''));
       console.log('  - Clearing DeepSeek key');
     }
-    
+
     if (apiKeys.value.gemini && apiKeys.value.gemini.trim() !== '') {
       promises.push(storeSecureValue(STORAGE_KEYS.GEMINI_API_KEY, apiKeys.value.gemini));
       console.log('  - Saving Gemini key');
     } else if (apiKeys.value.gemini === '') {
       promises.push(storeSecureValue(STORAGE_KEYS.GEMINI_API_KEY, ''));
       console.log('  - Clearing Gemini key');
+    }
+
+    // Save custom configuration for customized provider
+    if (selectedProvider.value === 'customized') {
+      const { storeValue } = await import('@/api/storageService');
+      promises.push(storeValue(STORAGE_KEYS.CUSTOMIZED_CONFIG, JSON.stringify(customConfig.value)));
+      console.log('  - Saving Customized provider configuration');
     }
     
     // Save all API keys first
@@ -885,7 +1001,8 @@ const tabs = [
   background: white;
   padding: 24px;
   border-radius: 8px;
-  width: 300px;
+  width: 400px;
+  max-width: 90vw;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
 }
 
@@ -991,6 +1108,93 @@ const tabs = [
 .api-key-info i {
   margin-right: 5px;
   color: #2196f3;
+}
+
+/* Customized Provider Configuration */
+.customized-provider-config {
+  margin-top: 10px;
+}
+
+.custom-url-section {
+  margin-top: 15px;
+}
+
+.custom-url-section label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.custom-url-input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 13px;
+  font-family: monospace;
+  box-sizing: border-box;
+}
+
+.custom-url-input:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+.field-hint {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.capabilities-section {
+  margin-top: 20px;
+}
+
+.capabilities-section h4 {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: #333;
+}
+
+.capability-item {
+  display: flex;
+  align-items: center;
+  margin-bottom: 10px;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.capability-toggle {
+  display: flex;
+  align-items: center;
+  min-width: 150px;
+  font-size: 12px;
+}
+
+.capability-toggle input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+.model-input {
+  flex: 1;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 3px;
+  font-size: 12px;
+  font-family: monospace;
+  box-sizing: border-box;
+}
+
+.model-input:focus {
+  outline: none;
+  border-color: #2196f3;
+  box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
 }
 
 /* Google Drive Storage Section */

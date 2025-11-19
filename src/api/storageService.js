@@ -7,7 +7,9 @@ import encryptionService, { EncryptionService } from './encryptionService.js'
 
 // Constants
 export const STORAGE_KEYS = {
-  AZURE_OPENAI_KEY: 'azure_openai_key',
+  OPENAI_API_KEY: 'openai_api_key',  // Official OpenAI API
+  CUSTOMIZED_API_KEY: 'customized_api_key',  // Customized provider
+  CUSTOMIZED_CONFIG: 'customized_config',  // Customized provider configuration
   DEEPSEEK_API_KEY: 'deepseek_api_key',
   GEMINI_API_KEY: 'gemini_api_key',
   AZURE_SPEECH_KEY: 'azure_speech_key',
@@ -27,7 +29,8 @@ export const STORAGE_KEYS = {
 
 // Map storage keys to environment variable names
 const ENV_MAP = {
-  [STORAGE_KEYS.AZURE_OPENAI_KEY]: 'VITE_AZURE_OPENAI_KEY',
+  [STORAGE_KEYS.OPENAI_API_KEY]: 'VITE_OPENAI_API_KEY',
+  [STORAGE_KEYS.CUSTOMIZED_API_KEY]: 'VITE_CUSTOMIZED_API_KEY',
   [STORAGE_KEYS.DEEPSEEK_API_KEY]: 'VITE_DEEPSEEK_API_KEY',
   [STORAGE_KEYS.GEMINI_API_KEY]: 'VITE_GEMINI_API_KEY',
   [STORAGE_KEYS.AZURE_SPEECH_KEY]: 'VITE_AZURE_SPEECH_KEY'
@@ -719,7 +722,8 @@ class SecureStorageService {
    */
   isSensitiveKey(key) {
     const sensitiveKeys = [
-      STORAGE_KEYS.AZURE_OPENAI_KEY,
+      STORAGE_KEYS.OPENAI_API_KEY,
+      STORAGE_KEYS.CUSTOMIZED_API_KEY,
       STORAGE_KEYS.DEEPSEEK_API_KEY,
       STORAGE_KEYS.GEMINI_API_KEY,
       STORAGE_KEYS.AZURE_SPEECH_KEY
@@ -823,7 +827,9 @@ export { secureStorageService }
 function mapProviderToStorageKey(providerName) {
   switch (providerName) {
     case 'openai':
-      return STORAGE_KEYS.AZURE_OPENAI_KEY;
+      return STORAGE_KEYS.OPENAI_API_KEY;
+    case 'customized':
+      return STORAGE_KEYS.CUSTOMIZED_API_KEY;
     case 'deepseek':
       return STORAGE_KEYS.DEEPSEEK_API_KEY;
     case 'gemini':

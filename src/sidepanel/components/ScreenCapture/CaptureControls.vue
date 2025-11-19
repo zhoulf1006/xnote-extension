@@ -1,20 +1,40 @@
 <template>
   <div class="capture-controls">
-    <button
-      class="capture-button"
-      :class="{ capturing: isCapturing }"
-      :disabled="isCapturing || isProcessing"
-      @click="$emit('start-capture')"
-    >
-      <i :class="buttonIcon"></i>
-      <span>{{ buttonText }}</span>
-    </button>
+    <div class="action-buttons">
+      <button
+        class="capture-button"
+        :class="{ capturing: isCapturing }"
+        :disabled="isCapturing || isProcessing || isPasting"
+        @click="$emit('start-capture')"
+        @mouseenter="hoveredButton = 'capture'"
+        @mouseleave="hoveredButton = null"
+      >
+        <i :class="buttonIcon"></i>
+        <span>Capture</span>
+      </button>
 
-    <div class="capture-tips">
-      <div class="tip">
-        <i class="fas fa-info-circle"></i>
-        <span>Click and drag to select an area • Press ESC to cancel</span>
-      </div>
+      <button
+        class="paste-button"
+        :class="{ pasting: isPasting }"
+        :disabled="isCapturing || isProcessing || isPasting || !supportsVision"
+        @click="$emit('paste-image')"
+        @mouseenter="hoveredButton = 'paste'"
+        @mouseleave="hoveredButton = null"
+      >
+        <i :class="pasteButtonIcon"></i>
+        <span>Paste</span>
+      </button>
+    </div>
+
+    <!-- Single dynamic note that changes on hover -->
+    <div class="action-note" :class="noteClass">
+      {{ currentNoteText }}
+    </div>
+
+    <!-- Dynamic ESC hint during operations -->
+    <div v-if="isCapturing || isPasting" class="esc-hint">
+      <i class="fas fa-keyboard"></i>
+      <span>Press ESC to cancel</span>
     </div>
 
     <!-- Prompt Templates -->
@@ -50,14 +70,23 @@ const props = defineProps({
   isProcessing: {
     type: Boolean,
     default: false
+  },
+  isPasting: {
+    type: Boolean,
+    default: false
+  },
+  supportsVision: {
+    type: Boolean,
+    default: true
   }
 });
 
 // Emits
-const emit = defineEmits(['start-capture', 'prompt-selected']);
+const emit = defineEmits(['start-capture', 'paste-image', 'prompt-selected']);
 
 // State
 const selectedPrompt = ref('extract-text');
+const hoveredButton = ref(null);
 
 // Prompt templates
 const promptTemplates = [
@@ -80,10 +109,27 @@ const buttonIcon = computed(() => {
   return 'fas fa-camera';
 });
 
-const buttonText = computed(() => {
-  if (props.isCapturing) return 'Capturing...';
-  if (props.isProcessing) return 'Processing...';
-  return 'Capture Screenshot';
+const pasteButtonIcon = computed(() => {
+  if (props.isPasting) return 'fas fa-spinner fa-spin';
+  return 'fas fa-paste';
+});
+
+// Dynamic note text based on hover
+const currentNoteText = computed(() => {
+  if (hoveredButton.value === 'paste') {
+    return props.supportsVision
+      ? 'Ctrl+V or click to paste image from clipboard'
+      : 'Vision not supported by current provider';
+  }
+  // Default to capture instructions (also shown when hovering capture)
+  return 'Click and drag to select area on current page';
+});
+
+// Dynamic class for note color
+const noteClass = computed(() => {
+  if (hoveredButton.value === 'paste') return 'paste-hover';
+  // Default to capture styling
+  return 'capture-hover';
 });
 
 // Methods
@@ -106,22 +152,37 @@ onMounted(() => {
   margin-bottom: 20px;
 }
 
-.capture-button {
-  width: 100%;
+.action-buttons {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.capture-button,
+.paste-button {
   padding: 12px 16px;
-  background: linear-gradient(135deg, #9b81c4 0%, #bb88d1 100%);
   color: white;
   border: none;
   border-radius: 8px;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 10px;
+  gap: 8px;
   transition: all 0.2s ease;
+}
+
+.capture-button {
+  background: linear-gradient(135deg, #9b81c4 0%, #bb88d1 100%);
   box-shadow: 0 4px 8px rgba(103, 58, 183, 0.3);
+}
+
+.paste-button {
+  background: linear-gradient(135deg, #4caf50 0%, #66bb6a 100%);
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.3);
 }
 
 .capture-button:hover:not(:disabled) {
@@ -130,18 +191,30 @@ onMounted(() => {
   box-shadow: 0 4px 8px rgba(103, 58, 183, 0.4);
 }
 
-.capture-button:active:not(:disabled) {
+.paste-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #5cbf60 0%, #76c97a 100%);
   transform: scale(1.03);
-  box-shadow: 0 2px 8px rgba(103, 58, 183, 0.3);
+  box-shadow: 0 4px 8px rgba(76, 175, 80, 0.4);
 }
 
-.capture-button:disabled {
+.capture-button:active:not(:disabled),
+.paste-button:active:not(:disabled) {
+  transform: scale(1.03);
+}
+
+.capture-button:disabled,
+.paste-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
 .capture-button.capturing {
   background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+  animation: pulse 1.5s infinite;
+}
+
+.paste-button.pasting {
+  background: linear-gradient(135deg, #2196f3 0%, #42a5f5 100%);
   animation: pulse 1.5s infinite;
 }
 
@@ -157,25 +230,55 @@ onMounted(() => {
   }
 }
 
-.capture-tips {
-  margin-top: 12px;
-  padding: 10px;
-  background: #f0f7ff;
-  border-radius: 6px;
-  border: 1px solid #d0e4ff;
+/* Single dynamic note area */
+.action-note {
+  min-height: 20px;
+  padding: 6px 12px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: #6b7280;
+  text-align: center;
+  transition: color 0.2s ease;
 }
 
-.tip {
+/* Dynamic color based on hover */
+.action-note.capture-hover {
+  color: #8b73aa; /* Purple tint when hovering capture */
+}
+
+.action-note.paste-hover {
+  color: #5cb85c; /* Green tint when hovering paste */
+}
+
+/* Dynamic ESC hint */
+.esc-hint {
+  margin-top: 8px;
+  padding: 6px 10px;
+  background: #fef3c7;
+  border-radius: 4px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  color: #4a5568;
-  font-size: 13px;
+  justify-content: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #92400e;
+  animation: fadeIn 0.3s ease-in;
 }
 
-.tip i {
-  color: #3182ce;
+.esc-hint i {
   font-size: 14px;
+  color: #d97706;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Prompt Section */

@@ -1,11 +1,13 @@
 import { OpenAIProvider } from './openaiProvider';
 import { GeminiProvider } from './geminiProvider';
+import { CustomizedProvider } from './customizedProvider';
 
 /**
  * Registry that maps provider types to their implementation classes
  */
 export const ProviderRegistry = {
   'openai': OpenAIProvider,
+  'customized': CustomizedProvider,
   'gemini': GeminiProvider
 };
 

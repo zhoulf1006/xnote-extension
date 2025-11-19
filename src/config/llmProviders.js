@@ -1,11 +1,17 @@
 export const llmProviders = {
   openai: {
     name: 'OpenAI',
-    baseURL: 'https://api.rdsec.trendmicro.com/prod/aiendpoint/v1/',
+    baseURL: 'https://api.openai.com/v1',
     defaultModel: 'gpt-4o',
-    apiKeyEnv: 'VITE_AZURE_OPENAI_KEY',
+    apiKeyEnv: 'VITE_OPENAI_API_KEY',
     clientType: 'openai',
-    supportsVision: true // Supports image analysis
+    supportsVision: true, // Supports image analysis
+    supportsSpeech: true, // Supports TTS
+    models: {
+      chat: 'gpt-4o',
+      vision: 'gpt-4o',
+      speech: 'tts-1'
+    }
   },
   deepseek: {
     name: 'DeepSeek',
@@ -21,6 +27,21 @@ export const llmProviders = {
     apiKeyEnv: 'VITE_GEMINI_API_KEY',
     clientType: 'gemini',
     supportsVision: true // Gemini 2.0 Flash supports vision
+  },
+  customized: {
+    name: 'Customized',
+    baseURL: '', // User-configurable
+    defaultModel: 'gpt-4o',
+    apiKeyEnv: 'VITE_CUSTOMIZED_API_KEY',
+    clientType: 'customized',
+    supportsVision: true, // User can enable/disable
+    supportsSpeech: false, // User can enable/disable
+    requiresConfiguration: true,
+    models: {
+      chat: '', // User-configurable
+      vision: '', // User-configurable
+      speech: '' // User-configurable
+    }
   }
 };
 

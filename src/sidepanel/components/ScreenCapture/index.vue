@@ -29,7 +29,10 @@
       v-if="providerSupportsVision"
       :isCapturing="isCapturing"
       :isProcessing="isProcessing"
+      :isPasting="isPasting"
+      :supportsVision="providerSupportsVision"
       @start-capture="startCapture"
+      @paste-image="handlePasteImage"
       @prompt-selected="handlePromptSelected"
     />
 
@@ -85,7 +88,19 @@
           class="history-item"
           @click="loadFromHistory(item)"
         >
-          <img :src="item.thumbnail" alt="Capture thumbnail" />
+          <div class="history-image-wrapper">
+            <img :src="item.thumbnail" alt="Capture thumbnail" />
+            <i
+              v-if="item.source === 'clipboard'"
+              class="fas fa-paste source-icon"
+              title="Pasted from clipboard"
+            ></i>
+            <i
+              v-else
+              class="fas fa-camera source-icon"
+              title="Screen capture"
+            ></i>
+          </div>
           <div class="history-info">
             <div class="history-time">{{ formatTime(item.timestamp) }}</div>
             <div class="history-preview">{{ truncateText(item.text, 50) }}</div>
@@ -115,6 +130,7 @@ const navigationStore = useNavigationStore();
 const isCapturing = ref(false);
 const isProcessing = ref(false);
 const isStreaming = ref(false);
+const isPasting = ref(false);
 const capturedImage = ref(null);
 const extractedText = ref('');
 const error = ref(null);
@@ -204,6 +220,8 @@ watch(isCapturing, (newValue) => {
 onUnmounted(() => {
   window.removeEventListener('keydown', handleExtensionEscape, true);
   document.removeEventListener('keydown', handleExtensionEscape, true);
+  window.removeEventListener('keydown', handlePasteKeyboard);
+  document.removeEventListener('keydown', handlePasteKeyboard);
 });
 
 async function startCapture() {
@@ -234,7 +252,86 @@ async function startCapture() {
   }
 }
 
-async function processScreenshot(imageData, cropData) {
+// Handle paste image from clipboard
+async function handlePasteImage() {
+  try {
+    // Check if provider supports vision
+    if (!providerSupportsVision.value) {
+      error.value = `${currentProviderName.value} does not support image analysis. Please switch to OpenAI or Gemini.`;
+      return;
+    }
+
+    isPasting.value = true;
+    error.value = null;
+    extractedText.value = '';
+    hidePreview.value = false;
+
+    // Read image from clipboard
+    const imageData = await readImageFromClipboard();
+
+    if (!imageData) {
+      error.value = 'No image found in clipboard. Please copy an image first.';
+      isPasting.value = false;
+      return;
+    }
+
+    // Process the pasted image directly with 'clipboard' as source
+    await processScreenshot(imageData, null, 'clipboard');
+  } catch (err) {
+    console.error('Error pasting image:', err);
+    error.value = err.message || 'Failed to paste image from clipboard';
+  } finally {
+    isPasting.value = false;
+  }
+}
+
+// Read image from clipboard
+async function readImageFromClipboard() {
+  try {
+    // Check if clipboard API is available
+    if (!navigator.clipboard || !navigator.clipboard.read) {
+      throw new Error('Clipboard API is not available. Please use Chrome 76 or later.');
+    }
+
+    // Read clipboard items
+    const clipboardItems = await navigator.clipboard.read();
+
+    for (const clipboardItem of clipboardItems) {
+      // Check for image types
+      const imageTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif'];
+
+      for (const type of imageTypes) {
+        if (clipboardItem.types.includes(type)) {
+          // Get the blob
+          const blob = await clipboardItem.getType(type);
+
+          // Validate blob size (max 20MB)
+          if (blob.size > 20 * 1024 * 1024) {
+            throw new Error('Image is too large (max 20MB)');
+          }
+
+          // Convert blob to data URL
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+        }
+      }
+    }
+
+    return null; // No image found in clipboard
+  } catch (err) {
+    // Handle permission denied
+    if (err.name === 'NotAllowedError') {
+      throw new Error('Clipboard access denied. Please allow clipboard permissions and try again.');
+    }
+    throw err;
+  }
+}
+
+async function processScreenshot(imageData, cropData, source = 'screenshot') {
   try {
     isProcessing.value = true;
     isStreaming.value = false;
@@ -267,8 +364,8 @@ async function processScreenshot(imageData, cropData) {
     }
     isStreaming.value = false;
 
-    // Save to history
-    await saveToHistory(processedImage, extractedText.value);
+    // Save to history with source information
+    await saveToHistory(processedImage, extractedText.value, source);
   } catch (err) {
     console.error('Error processing screenshot:', err);
     error.value = err.message || 'Failed to process screenshot';
@@ -278,7 +375,7 @@ async function processScreenshot(imageData, cropData) {
   }
 }
 
-async function saveToHistory(image, text) {
+async function saveToHistory(image, text, source = 'screenshot') {
   try {
     // Create thumbnail (smaller version)
     const thumbnail = await screenshotService.compressImage(image, 200, 0.7);
@@ -288,7 +385,8 @@ async function saveToHistory(image, text) {
       timestamp: new Date().toISOString(),
       thumbnail,
       image,
-      text
+      text,
+      source // Track whether it's from screenshot or clipboard paste
     };
 
     // Add to local history
@@ -368,6 +466,24 @@ function truncateText(text, maxLength) {
   return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
 }
 
+// Handle keyboard shortcut for paste (Ctrl+V / Cmd+V)
+function handlePasteKeyboard(e) {
+  // Only handle paste when the component is visible and not already processing
+  if ((e.ctrlKey || e.metaKey) && e.key === 'v') {
+    if (!isCapturing.value && !isProcessing.value && !isPasting.value && providerSupportsVision.value) {
+      // Only handle if no text input is focused
+      const activeElement = document.activeElement;
+      if (activeElement && (activeElement.tagName === 'INPUT' || activeElement.tagName === 'TEXTAREA')) {
+        return; // Let the input handle the paste
+      }
+
+      e.preventDefault();
+      e.stopPropagation();
+      handlePasteImage();
+    }
+  }
+}
+
 // Load history on mount
 onMounted(async () => {
   try {
@@ -378,6 +494,10 @@ onMounted(async () => {
   } catch (err) {
     console.error('Error loading history:', err);
   }
+
+  // Add paste keyboard listener
+  window.addEventListener('keydown', handlePasteKeyboard);
+  document.addEventListener('keydown', handlePasteKeyboard);
 });
 
 // Listen for screenshot captured messages
@@ -595,12 +715,30 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   transform: translateY(-1px);
 }
 
-.history-item img {
+.history-image-wrapper {
+  position: relative;
   width: 60px;
   height: 45px;
+}
+
+.history-item img {
+  width: 100%;
+  height: 100%;
   object-fit: cover;
   border-radius: 4px;
   border: 1px solid #e0e0e0;
+}
+
+.source-icon {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  background: rgba(255, 255, 255, 0.9);
+  color: #673ab7;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-size: 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .history-info {

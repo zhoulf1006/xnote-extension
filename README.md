@@ -99,8 +99,11 @@ pnpm install
 3. **Configure environment variables**
 Create a `.env` file in the root directory:
 ```env
-# OpenAI (Azure endpoint)
-VITE_AZURE_OPENAI_KEY=your_azure_openai_key
+# OpenAI (Official API)
+VITE_OPENAI_API_KEY=your_openai_api_key
+
+# Customized Provider (Azure, local, or other OpenAI-compatible APIs)
+VITE_CUSTOMIZED_API_KEY=your_customized_api_key
 
 # Google Gemini (Recommended - has free tier)
 VITE_GEMINI_API_KEY=your_gemini_api_key

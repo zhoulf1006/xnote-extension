@@ -10,7 +10,8 @@
     "contextMenus",
     "activeTab",
     "scripting",
-    "storage"
+    "storage",
+    "clipboardRead"
   ],
   "oauth2": {
     "client_id": "1014810627971-oou6s3jbjobvl2oedj22bl4q6a1iio7t.apps.googleusercontent.com",

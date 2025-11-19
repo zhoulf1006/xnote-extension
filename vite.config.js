@@ -85,7 +85,8 @@ export default defineConfig(({ command }) => {
     define: isProd ? {
       // In production builds, replace environment variables with empty values
       // to ensure they don't get inlined
-      'import.meta.env.VITE_AZURE_OPENAI_KEY': JSON.stringify(''),
+      'import.meta.env.VITE_OPENAI_API_KEY': JSON.stringify(''),
+      'import.meta.env.VITE_CUSTOMIZED_API_KEY': JSON.stringify(''),
       'import.meta.env.VITE_DEEPSEEK_API_KEY': JSON.stringify(''),
       'import.meta.env.VITE_GEMINI_API_KEY': JSON.stringify(''),
       'import.meta.env.VITE_AZURE_SPEECH_KEY': JSON.stringify(''),
