@@ -78,7 +78,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
 import { generateCategoryForPage, getSubcategorySuggestions } from './categoryExtractor';
 
 const props = defineProps({
@@ -118,10 +118,19 @@ watch(() => props.suggestedCategory, (newVal) => {
     localSubCategory.value = newVal.subCategory || '';
     updateSubSuggestions();
   }
-}, { immediate: true });
+});
 
 watch(() => props.show, (newVal) => {
   if (newVal && props.suggestedCategory) {
+    localMainCategory.value = props.suggestedCategory.mainCategory || '';
+    localSubCategory.value = props.suggestedCategory.subCategory || '';
+    updateSubSuggestions();
+  }
+});
+
+// Handle initial setup when component is mounted
+onMounted(() => {
+  if (props.suggestedCategory) {
     localMainCategory.value = props.suggestedCategory.mainCategory || '';
     localSubCategory.value = props.suggestedCategory.subCategory || '';
     updateSubSuggestions();
