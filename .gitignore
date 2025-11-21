@@ -239,3 +239,7 @@ screenshots/
 # Project Specific
 # =====================================
 # Add any project-specific patterns below
+
+# Build and publishing directories
+pack/
+publish/
