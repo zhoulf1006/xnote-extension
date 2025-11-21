@@ -121,13 +121,33 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
      */
     async disconnect() {
       try {
+        // Stop periodic sync first (fix memory leak)
+        this.stopPeriodicSync();
+
+        // Disconnect from service
         await googleDriveService.disconnect();
+
+        // Reset ALL store state
         this.isConnected = false;
-        this.syncEnabled = false;
+        this.isSyncing = false;
         this.lastSyncTime = null;
-        console.log('Disconnected from Google Drive');
+        this.syncEnabled = false;
+        this.syncStatus = 'idle';
+        this.lastSyncError = null;
+        this.syncDetails = {
+          chats: 0,
+          summaries: 0,
+          translations: 0
+        };
+        this.useCustomLocation = false;
+        this.parentFolderId = null;
+        this.parentFolderName = null;
+        this.isChangingLocation = false;
+
+        console.log('Disconnected from Google Drive and cleared all state');
       } catch (error) {
         console.error('Error disconnecting from Google Drive:', error);
+        throw error; // Re-throw to handle in UI
       }
     },
 
@@ -169,9 +189,10 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
      */
     async exportContent(type, data) {
       if (!this.isConnected) {
-        console.warn('Not connected to Google Drive');
-        this.lastSyncError = 'Not connected to Google Drive';
-        return null;
+        const error = new Error('Not connected to Google Drive');
+        console.warn(error.message);
+        this.lastSyncError = error.message;
+        throw error; // Throw error instead of returning null
       }
 
       this.syncStatus = 'syncing';

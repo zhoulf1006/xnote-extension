@@ -258,6 +258,23 @@ class GoogleFolderBrowserService {
       return false;
     }
   }
+
+  /**
+   * Clear all cached data and reset state
+   * Called when disconnecting from Google Drive
+   */
+  clearCache() {
+    this.cache.clear();
+    this.currentPath = [];
+    console.log('Cleared folder browser cache and reset state');
+  }
+
+  /**
+   * Reset the service to initial state
+   */
+  reset() {
+    this.clearCache();
+  }
 }
 
 // Export singleton instance

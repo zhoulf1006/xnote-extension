@@ -89,7 +89,7 @@ import useFavoritesStore from '@/stores/favorites';
 import FavoritesList from './FavoritesList.vue';
 import CategoryConfirmDialog from './CategoryConfirmDialog.vue';
 import { useLLMConfigStore } from '@/stores/llmConfig';
-import { useGoogleDriveStore } from '@/stores/googleDrive';
+import { useGoogleDrive } from '@/sidepanel/composables/useGoogleDrive';
 import { useDriveMappings } from '@/stores/driveMappings';
 import { extractCategoryFromSummary, generateCategoryForPage } from './categoryExtractor';
 import { googleDriveService } from '@/api/googleDriveService';
@@ -99,16 +99,9 @@ const navigationStore = useNavigationStore();
 const favoritesStore = useFavoritesStore();
 const llmConfigStore = useLLMConfigStore();
 
-// Initialize stores with proper error handling
-let googleDriveStore = null;
-let mappingsStore = null;
-
-try {
-  googleDriveStore = useGoogleDriveStore();
-  mappingsStore = useDriveMappings();  // Use new location-aware store
-} catch (error) {
-  console.warn('Error initializing stores:', error);
-}
+// Initialize Google Drive composable and stores
+const googleDrive = useGoogleDrive();
+const mappingsStore = useDriveMappings();
 
 const currentPage = ref(null);
 const isStreaming = ref(false);
@@ -196,9 +189,9 @@ const regenerateSummary = async () => {
   }
 };
 
-// Use computed to safely access Google Drive store
+// Use computed to safely access Google Drive connection state
 const isGoogleDriveConnected = computed(() => {
-  return googleDriveStore?.isConnected || false;
+  return googleDrive.isConnected.value;
 });
 
 const markdownOptions = {
@@ -408,10 +401,10 @@ const toggleFavorite = async () => {
 const saveToGoogleDrive = async () => {
   if (!currentPage.value?.summary) return;
 
-  // Check if stores are initialized
-  if (!googleDriveStore || !mappingsStore) {
-    console.error('Google Drive stores not initialized');
-    alert('Google Drive feature is not available. Please reload the extension.');
+  // Check if connected to Google Drive
+  if (!googleDrive.isConnected.value) {
+    console.warn('Not connected to Google Drive');
+    alert('Please connect to Google Drive first.');
     return;
   }
 

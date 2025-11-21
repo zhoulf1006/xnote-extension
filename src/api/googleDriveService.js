@@ -4,6 +4,7 @@
  */
 
 import { getStoredValue, storeValue, STORAGE_KEYS } from './storageService';
+import { googleFolderBrowserService } from './googleFolderBrowserService';
 
 class GoogleDriveService {
   constructor() {
@@ -22,6 +23,11 @@ class GoogleDriveService {
   async executeWithRetry(requestFunc, canRetry = true) {
     const response = await requestFunc();
 
+    // Don't retry if we're in the process of disconnecting
+    if (this.isDisconnecting) {
+      return response;
+    }
+
     // If we get a 401 and can retry, try once more with a fresh token
     if (response.status === 401 && canRetry) {
       console.log('Got 401, attempting to refresh token and retry...');
@@ -37,8 +43,10 @@ class GoogleDriveService {
       // Wait a bit for the cache to clear
       await new Promise(resolve => setTimeout(resolve, 100));
 
-      // Retry the request once
-      return await requestFunc();
+      // Retry the request once (but check again if we're disconnecting)
+      if (!this.isDisconnecting) {
+        return await requestFunc();
+      }
     }
 
     return response;
@@ -108,23 +116,68 @@ class GoogleDriveService {
    * @returns {Promise<void>}
    */
   async disconnect() {
-    // Get current token to revoke it
-    const token = await this.getValidToken();
-    if (token && typeof chrome !== 'undefined' && chrome.identity) {
-      chrome.identity.removeCachedAuthToken({ token: token }, () => {
-        chrome.identity.revokeAuthToken({ token: token }, () => {
-          console.log('Token revoked');
-        });
-      });
+    // Set a flag to prevent retries during disconnect
+    this.isDisconnecting = true;
+
+    try {
+      // Get current token to revoke it
+      const token = await this.getValidToken();
+
+      if (token) {
+        // Step 1: Revoke token with Google's OAuth2 server for complete disconnection
+        try {
+          const response = await fetch('https://oauth2.googleapis.com/revoke', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `token=${token}`
+          });
+
+          if (response.ok) {
+            console.log('Token successfully revoked with Google OAuth2 server');
+          } else {
+            console.warn('Google token revocation returned non-OK status:', response.status);
+          }
+        } catch (error) {
+          console.warn('Failed to revoke token with Google (will continue with local cleanup):', error);
+          // Continue with disconnect even if revocation fails
+        }
+
+        // Step 2: Clear token from Chrome's cache
+        if (typeof chrome !== 'undefined' && chrome.identity) {
+          await new Promise((resolve) => {
+            chrome.identity.removeCachedAuthToken({ token: token }, () => {
+              if (chrome.runtime.lastError) {
+                console.warn('Error clearing cached token:', chrome.runtime.lastError);
+              } else {
+                console.log('Token removed from Chrome cache');
+              }
+              resolve();
+            });
+          });
+        }
+      }
+
+      // Clear all state
+      this.rootFolderId = null;
+
+      // Clear folder browser cache
+      googleFolderBrowserService.clearCache();
+
+      // Clear all storage keys including custom location settings
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_CONNECTED, false);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_FOLDER_ID, null);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_SYNC_ENABLED, false);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_LAST_SYNC, null);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID, null);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_NAME, null);
+      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_USE_CUSTOM_LOCATION, false);
+
+      console.log('Google Drive disconnected and all state cleared');
+    } finally {
+      this.isDisconnecting = false;
     }
-
-    this.rootFolderId = null;
-
-    // Clear storage
-    await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_CONNECTED, false);
-    await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_FOLDER_ID, null);
-    await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_SYNC_ENABLED, false);
-    await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_LAST_SYNC, null);
   }
 
   /**
@@ -132,7 +185,13 @@ class GoogleDriveService {
    * @returns {Promise<boolean>}
    */
   async isAuthenticated() {
-    // Always check for a valid token
+    // First check stored connection state
+    const isConnected = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_CONNECTED);
+    if (!isConnected) {
+      return false;
+    }
+
+    // Then check for a valid token
     const token = await this.getValidToken();
     return !!token;
   }

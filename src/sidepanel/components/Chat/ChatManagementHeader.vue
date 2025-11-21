@@ -37,11 +37,11 @@
 
       <!-- Google Drive Upload -->
       <button
-        v-if="activeChat && activeChat.messages.length > 0"
+        v-if="canUploadToDrive"
         @click="uploadToGoogleDrive"
         class="action-button drive-btn"
         :class="{ uploaded: isUploaded }"
-        title="Upload to Google Drive"
+        :title="isUploaded ? 'Already uploaded to Google Drive' : 'Upload to Google Drive'"
       >
         <i :class="isUploading ? 'fas fa-spinner fa-spin' : 'fab fa-google-drive'"></i>
         <span class="btn-text">{{ isUploaded ? 'Uploaded' : 'Upload' }}</span>
@@ -80,7 +80,7 @@
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
 import chatHistory from '@/stores/chatHistory'
 import ChatHistoryList from './ChatHistoryList.vue'
-import { googleDriveService } from '@/api/googleDriveService'
+import { useGoogleDrive } from '@/sidepanel/composables/useGoogleDrive'
 import { useDriveMappings } from '@/stores/driveMappings'
 
 const emit = defineEmits(['new-chat', 'chat-loaded'])
@@ -91,12 +91,21 @@ const showTitleEdit = ref(false)
 const newTitle = ref('')
 const isUploading = ref(false)
 
+// Google Drive composable
+const googleDrive = useGoogleDrive()
+
 // Drive mappings store
 const driveMappings = useDriveMappings()
 
 // Computed properties
 const activeChat = computed(() => chatHistory.state.activeChat)
 const chatCount = computed(() => chatHistory.state.chats.length)
+
+const canUploadToDrive = computed(() => {
+  return googleDrive.isConnected.value &&
+         activeChat.value &&
+         activeChat.value.messages.length > 0
+})
 
 const isUploaded = computed(() => {
   if (!activeChat.value) return false
@@ -150,7 +159,11 @@ const saveTitleEdit = async () => {
 
 // Upload to Google Drive
 const uploadToGoogleDrive = async () => {
-  if (!activeChat.value || activeChat.value.messages.length === 0) return
+  // Additional validation check
+  if (!canUploadToDrive.value) {
+    console.warn('Cannot upload to Google Drive: not connected or no active chat')
+    return
+  }
 
   isUploading.value = true
   try {
@@ -163,8 +176,8 @@ const uploadToGoogleDrive = async () => {
       updatedAt: activeChat.value.updatedAt
     }
 
-    // Export to Google Drive using the existing exportContent method
-    const fileId = await googleDriveService.exportContent('chat', chatData)
+    // Use the composable's upload method with built-in validation
+    const fileId = await googleDrive.uploadChat(chatData)
 
     if (fileId) {
       // Save mapping using the new saveChatMapping method
@@ -177,17 +190,10 @@ const uploadToGoogleDrive = async () => {
         fileName: fileName,
         uploadedAt: new Date().toISOString()
       })
-
-      // Show success message
-      const successMsg = document.createElement('div')
-      successMsg.className = 'upload-success-toast'
-      successMsg.textContent = 'Chat uploaded to Google Drive!'
-      document.body.appendChild(successMsg)
-      setTimeout(() => successMsg.remove(), 3000)
     }
   } catch (error) {
     console.error('Error uploading to Google Drive:', error)
-    alert('Failed to upload to Google Drive. Please check your configuration.')
+    // Error is already shown by the composable
   } finally {
     isUploading.value = false
   }
