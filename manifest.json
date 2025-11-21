@@ -20,9 +20,6 @@
       "https://www.googleapis.com/auth/drive.file"
     ]
   },
-  "host_permissions": [
-    "<all_urls>"
-  ],
   "background": {
     "service_worker": "background.js",
     "type": "module"
