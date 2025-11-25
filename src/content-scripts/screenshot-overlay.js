@@ -107,19 +107,19 @@
     if (document.body.tabIndex < 0) {
       document.body.tabIndex = -1;
     }
-    document.body.focus();
+    document.body.focus({ preventScroll: true });
 
     // Step 2: Use requestAnimationFrame to ensure DOM is painted
     requestAnimationFrame(() => {
       // Step 3: Focus overlay
-      overlay.focus();
+      overlay.focus({ preventScroll: true });
 
       // Step 4: Verify and retry if needed
       setTimeout(() => {
         if (document.activeElement !== overlay) {
           // Fallback: Try click to force focus
           overlay.click();
-          overlay.focus();
+          overlay.focus({ preventScroll: true });
         }
       }, 50);
     });
@@ -331,9 +331,9 @@
     else if (request.action === 'focusScreenshotOverlay') {
       if (overlay) {
         // Focus body first to ensure we're in page context
-        document.body.focus();
+        document.body.focus({ preventScroll: true });
         setTimeout(() => {
-          overlay.focus();
+          overlay.focus({ preventScroll: true });
         }, 10);
       }
       sendResponse({ success: true });
