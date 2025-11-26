@@ -28,6 +28,14 @@ export function useQuickLinks() {
   const editingLink = reactive({})
   const editingLinkData = reactive({ name: '', url: '' })
 
+  // Current tab management
+  const showAddCurrentTab = reactive({})
+  const currentTabData = reactive({
+    name: '',
+    url: '',
+    categoryName: ''
+  })
+
   // Search state
   const searchQuery = ref('')
 
@@ -54,6 +62,7 @@ export function useQuickLinks() {
       Object.keys(editingCategory).forEach(key => delete editingCategory[key])
       Object.keys(editingLink).forEach(key => delete editingLink[key])
       Object.keys(showAddLink).forEach(key => delete showAddLink[key])
+      Object.keys(showAddCurrentTab).forEach(key => delete showAddCurrentTab[key])
     }
   }
 
@@ -217,6 +226,187 @@ export function useQuickLinks() {
     } catch (err) {
       error.value = quickLinksService.formatError(err)
     }
+  }
+
+  // Current Tab Methods
+  /**
+   * Get current active tab information via Chrome API
+   * @returns {Object|null} Object with {title, url} or null if unavailable
+   */
+  const getCurrentTabInfo = async () => {
+    try {
+      // Check Chrome API availability
+      if (typeof chrome === 'undefined' || !chrome.tabs) {
+        console.warn('Chrome tabs API not available')
+        return null
+      }
+
+      // Query active tab in current window
+      const [activeTab] = await chrome.tabs.query({
+        active: true,
+        currentWindow: true
+      })
+
+      if (!activeTab) {
+        console.warn('No active tab found')
+        return null
+      }
+
+      return {
+        title: activeTab.title || '',
+        url: activeTab.url || ''
+      }
+    } catch (error) {
+      console.error('Error getting current tab:', error)
+      return null
+    }
+  }
+
+  /**
+   * Validate that tab URL is appropriate for saving as a link
+   * Blocks chrome://, file://, and other restricted URL schemes
+   * @param {string} url - The URL to validate
+   * @returns {string|null} Error message or null if valid
+   */
+  const validateTabUrl = (url) => {
+    if (!url) {
+      return 'No URL available for current tab'
+    }
+
+    // List of restricted URL schemes that should not be saved
+    const restrictedSchemes = [
+      'chrome://',
+      'chrome-extension://',
+      'edge://',
+      'about:',
+      'file://',
+      'view-source:'
+    ]
+
+    const lowerUrl = url.toLowerCase()
+
+    // Check if URL starts with any restricted scheme
+    for (const scheme of restrictedSchemes) {
+      if (lowerUrl.startsWith(scheme)) {
+        return `Cannot save ${scheme} URLs. Please navigate to a regular webpage.`
+      }
+    }
+
+    // Only allow HTTP and HTTPS
+    if (!lowerUrl.startsWith('http://') && !lowerUrl.startsWith('https://')) {
+      return 'Only HTTP/HTTPS URLs can be saved'
+    }
+
+    return null // Valid
+  }
+
+  /**
+   * Show inline form to add current tab with pre-filled data
+   * Fetches current tab info, validates URL, and displays editable form
+   * @param {string} categoryName - The category to add the link to
+   */
+  const showAddCurrentTabForm = async (categoryName) => {
+    try {
+      error.value = null
+
+      // Check if running in extension context
+      if (typeof chrome === 'undefined' || !chrome.tabs) {
+        error.value = 'This feature only works in the Chrome extension environment'
+        return
+      }
+
+      // Get current tab information
+      const tabInfo = await getCurrentTabInfo()
+      if (!tabInfo) {
+        error.value = 'Could not retrieve current tab information. Please try again.'
+        return
+      }
+
+      // Validate URL scheme (block chrome://, file://, etc.)
+      const urlValidationError = validateTabUrl(tabInfo.url)
+      if (urlValidationError) {
+        error.value = urlValidationError
+        return
+      }
+
+      // Pre-fill form data with tab information
+      currentTabData.name = tabInfo.title || 'Untitled Page'
+      currentTabData.url = tabInfo.url
+      currentTabData.categoryName = categoryName
+
+      // Show the inline form
+      showAddCurrentTab[categoryName] = true
+
+      // Auto-focus and select text in name input for easy editing
+      await nextTick()
+      const input = document.querySelector('.current-tab-name-input')
+      if (input) {
+        input.select() // Selects all text so user can immediately start typing
+      }
+    } catch (err) {
+      console.error('Error showing add current tab form:', err)
+      error.value = quickLinksService.formatError(err)
+    }
+  }
+
+  /**
+   * Save current tab as a link to the category with user's edited title
+   */
+  const addCurrentTabLink = async () => {
+    const categoryName = currentTabData.categoryName
+
+    // Validate link data using existing validation
+    const validationError = quickLinksService.validateLinkDataUI(
+      currentTabData.name,
+      currentTabData.url
+    )
+    if (validationError) {
+      error.value = validationError
+      return
+    }
+
+    try {
+      // Add link to category
+      await quickLinksService.addLink(
+        categoryName,
+        currentTabData.name.trim(),
+        currentTabData.url.trim()
+      )
+
+      // Reload data to reflect changes
+      await loadSegLinks()
+
+      // Store the name before clearing
+      const savedName = currentTabData.name
+
+      // Close form and clear data
+      cancelAddCurrentTab(categoryName)
+
+      // Show temporary success message
+      error.value = null
+      const successMessage = `Added "${savedName}" to ${categoryName}`
+      error.value = successMessage
+
+      // Auto-dismiss success message after 3 seconds
+      setTimeout(() => {
+        if (error.value === successMessage) {
+          error.value = null
+        }
+      }, 3000)
+    } catch (err) {
+      error.value = quickLinksService.formatError(err)
+    }
+  }
+
+  /**
+   * Cancel adding current tab and reset form state
+   * @param {string} categoryName - The category whose form should be closed
+   */
+  const cancelAddCurrentTab = (categoryName) => {
+    delete showAddCurrentTab[categoryName]
+    currentTabData.name = ''
+    currentTabData.url = ''
+    currentTabData.categoryName = ''
   }
 
   // Save current page
@@ -385,6 +575,8 @@ export function useQuickLinks() {
     newLink,
     editingLink,
     editingLinkData,
+    showAddCurrentTab,      // NEW
+    currentTabData,         // NEW
 
     // Search State
     searchQuery,
@@ -414,6 +606,11 @@ export function useQuickLinks() {
     saveLink,
     cancelEditLink,
     deleteLink,
+
+    // Current Tab Methods   // NEW SECTION
+    showAddCurrentTabForm,
+    addCurrentTabLink,
+    cancelAddCurrentTab,
 
     // Page Saving Methods
     saveCurrentPageToCategory,

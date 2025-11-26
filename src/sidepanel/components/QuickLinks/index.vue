@@ -73,9 +73,16 @@
           </div>
           
           <div class="model-actions" @click.stop>
+            <!-- Add current tab button (always visible) -->
+            <button @click="showAddCurrentTabForm(model.name)"
+                    class="btn-icon btn-tab"
+                    title="Add current tab">
+              <i class="fas fa-star"></i>
+            </button>
+
             <!-- Always show add link button -->
-            <button @click="showAddLink[model.name] = true" 
-                    class="btn-icon btn-add" 
+            <button @click="showAddLink[model.name] = true"
+                    class="btn-icon btn-add"
                     title="Add link">
               <i class="fas fa-plus"></i>
             </button>
@@ -113,15 +120,44 @@
 
         <!-- Add Link Form -->
         <div v-if="showAddLink[model.name]" class="add-link-form">
-          <input v-model="newLink.name" 
-                 placeholder="Link name" 
+          <input v-model="newLink.name"
+                 placeholder="Link name"
                  class="form-input">
-          <input v-model="newLink.url" 
-                 placeholder="Link URL" 
+          <input v-model="newLink.url"
+                 placeholder="Link URL"
                  class="form-input">
           <div class="form-actions">
             <button @click="addLink(model.name)" class="btn btn-primary">Add</button>
             <button @click="cancelAddLink(model.name)" class="btn btn-outline">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Add Current Tab Form -->
+        <div v-if="showAddCurrentTab[model.name]" class="add-current-tab-form">
+          <div class="form-row">
+            <label class="form-label">Tab Title (editable):</label>
+            <input v-model="currentTabData.name"
+                   placeholder="Link name"
+                   class="form-input current-tab-name-input"
+                   @keyup.enter="addCurrentTabLink"
+                   ref="currentTabNameInput">
+          </div>
+          <div class="form-row">
+            <label class="form-label">URL (from current tab):</label>
+            <input v-model="currentTabData.url"
+                   placeholder="Link URL"
+                   class="form-input url-readonly"
+                   disabled
+                   readonly
+                   title="This URL is captured from your current tab and cannot be edited">
+          </div>
+          <div class="form-actions">
+            <button @click="addCurrentTabLink" class="btn btn-primary">
+              Add
+            </button>
+            <button @click="cancelAddCurrentTab(model.name)" class="btn btn-outline">
+              Cancel
+            </button>
           </div>
         </div>
 
@@ -219,6 +255,8 @@ const {
   newLink,
   editingLink,
   editingLinkData,
+  showAddCurrentTab,      // NEW
+  currentTabData,         // NEW
 
   // Search State
   searchQuery,
@@ -248,6 +286,11 @@ const {
   saveLink,
   cancelEditLink,
   deleteLink,
+
+  // Current Tab Methods  // NEW SECTION
+  showAddCurrentTabForm,
+  addCurrentTabLink,
+  cancelAddCurrentTab,
 
   // Page Saving Methods
   saveCurrentPageToCategory,

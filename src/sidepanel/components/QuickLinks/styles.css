@@ -150,7 +150,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 4px;
-  transition: all 0.2s ease;
+  transition: all 0.1s ease;
   border: none;
   cursor: pointer;
 }
@@ -159,21 +159,21 @@
 .btn-add {
   background: transparent;
   color: #673ab7;
-  border-color: #ba92ff;
-  transition: all 0.2s ease;
+  border: 1px solid #ba92ff;
+  transition: all 0.1s ease;
 }
 
 .btn-add:hover {
   background: #ba92ff;
   color: #673ab7;
-  border-color: #ba92ff;
+  border: 1px solid #ba92ff;
   transform: scale(1.05);
 }
 
 .btn-edit {
   background: #e8f5e8;
   color: #2e7d32;
-  transition: all 0.2s ease;
+  transition: all 0.1s ease;
 }
 
 .btn-edit:hover {
@@ -224,6 +224,21 @@
 .btn-bookmark:hover {
   background: #ffeaa7;
   color: #664d03;
+  transform: scale(1.05);
+}
+
+/* Add Current Tab button - matches Add button styling */
+.btn-tab {
+  background: transparent;
+  color: #673ab7;
+  border: 1px solid #ba92ff;
+  transition: all 0.1s ease;
+}
+
+.btn-tab:hover {
+  background: #ba92ff;
+  color: #673ab7;
+  border: 1px solid #ba92ff;
   transform: scale(1.05);
 }
 
@@ -359,6 +374,53 @@
   padding: 8px;
   background: rgba(103, 58, 183, 0.02);
   border-top: 1px solid rgba(103, 58, 183, 0.1);
+}
+
+/* Add Current Tab Form - blue accent to match tab button */
+.add-current-tab-form {
+  padding: 12px;
+  background: rgba(25, 118, 210, 0.03);
+  border-top: 1px solid rgba(25, 118, 210, 0.15);
+}
+
+.form-row {
+  margin-bottom: 8px;
+}
+
+.form-row:last-of-type {
+  margin-bottom: 12px;
+}
+
+.form-label {
+  display: block;
+  font-size: 11px;
+  color: #6b7280;
+  margin-bottom: 4px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Read-only URL field styling */
+.url-readonly {
+  background: #f5f5f5;
+  color: #6c757d;
+  cursor: not-allowed;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+.url-readonly:focus {
+  border-color: #ddd;
+  box-shadow: none;
+}
+
+/* Editable title field with blue focus */
+.current-tab-name-input:focus {
+  outline: none;
+  border-color: #1976d2;
+  box-shadow: 0 0 0 2px rgba(25, 118, 210, 0.15);
 }
 
 .form-input {
