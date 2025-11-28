@@ -30,10 +30,11 @@
             <span class="message-time">{{ formatTime(msg.timestamp) }}</span>
             <button
               class="action-btn"
+              :class="{ 'copied': copiedId === msg.id }"
               @click="handleCopy(msg)"
-              title="Copy to clipboard"
+              :title="copiedId === msg.id ? 'Copied!' : 'Copy to clipboard'"
             >
-              <i class="fas fa-copy"></i>
+              <i :class="copiedId === msg.id ? 'fas fa-check' : 'fas fa-copy'"></i>
             </button>
             <button
               class="action-btn delete-btn"
@@ -92,6 +93,7 @@ const messageText = ref('');
 const isSending = ref(false);
 const messagesContainer = ref(null);
 const inputRef = ref(null);
+const copiedId = ref(null);
 
 const canSend = computed(() => messageText.value.trim().length > 0);
 
@@ -163,7 +165,16 @@ const insertNewline = () => {
   messageText.value += '\n';
 };
 
-const handleCopy = (msg) => {
+const handleCopy = async (msg) => {
+  try {
+    await navigator.clipboard.writeText(msg.content);
+    copiedId.value = msg.id;
+    setTimeout(() => {
+      copiedId.value = null;
+    }, 2000);
+  } catch (error) {
+    console.error('Failed to copy:', error);
+  }
   emit('copy', msg);
 };
 
@@ -348,6 +359,11 @@ watch(() => props.messages.length, async () => {
 
 .action-btn.delete-btn:hover {
   color: #dc3545;
+}
+
+.action-btn.copied {
+  background: rgba(16, 185, 129, 0.15) !important;
+  color: #10b981 !important;
 }
 
 .action-btn i {
