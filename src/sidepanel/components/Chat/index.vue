@@ -420,8 +420,8 @@ watch(newMessage, adjustTextareaHeight)
 }
 
 .message-user .message-content {
-  background-color: #2196f3;
-  color: white;
+  background-color: rgba(103, 58, 183, 0.15);
+  color: #333;
   border-bottom-right-radius: 4px;
 }
 
@@ -473,7 +473,7 @@ textarea:disabled {
 button {
   background: none;
   border: none;
-  color: #2196f3;
+  color: #673ab7;
   cursor: pointer;
   padding: 8px;
   font-size: 20px;
@@ -484,7 +484,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  color: #1976d2;
+  color: #5e35b1;
 }
 
 button:disabled {

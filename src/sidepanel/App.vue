@@ -36,6 +36,7 @@
       <Translation v-if="navigationStore.state.activeTab === 'translate'" />
       <Summary v-if="navigationStore.state.activeTab === 'summary'" />
       <ScreenCapture v-if="navigationStore.state.activeTab === 'capture'" />
+      <FileTransfer v-if="navigationStore.state.activeTab === 'transfer'" />
     </main>
     <div v-if="showConfig" class="config-modal">
       <div class="config-content">
@@ -404,6 +405,7 @@ import QuickLinks from './components/QuickLinks/index.vue';
 import Translation from './components/Translation/index.vue';
 import Summary from './components/Summary/index.vue';
 import ScreenCapture from './components/ScreenCapture/index.vue';
+import FileTransfer from './components/FileTransfer/index.vue';
 import ApiKeyInput from './components/Common/ApiKeyInput.vue';
 import FolderBrowser from './components/FolderBrowser/index.vue';
 
@@ -604,6 +606,11 @@ onMounted(async () => {
   // Listen for custom event to open LLM config
   window.addEventListener('openLLMConfig', () => {
     openConfigModal();
+  });
+
+  // Listen for custom event to open storage modal (from FileTransfer)
+  window.addEventListener('openStorageModal', () => {
+    showStorageModal.value = true;
   });
 
   try {
@@ -866,6 +873,7 @@ const tabs = [
   { id: 'translate', name: 'Translate', icon: 'fas fa-language' },
   { id: 'summary', name: 'Summary', icon: 'fas fa-file-alt' },
   { id: 'links', name: 'Quick Links', icon: 'fas fa-link' },
+  { id: 'transfer', name: 'Transfer', icon: 'fas fa-exchange-alt' },
 ];
 </script>
 
@@ -1287,7 +1295,6 @@ const tabs = [
 .last-sync {
   font-size: 12px;
   color: #6c757d;
-  margin-bottom: 15px;
   padding: 8px;
   background: white;
   border-radius: 4px;

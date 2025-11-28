@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'xnote-db';
-const DB_VERSION = 2; // Current version supporting both favorites and chatHistory
+const DB_VERSION = 3; // Version 3: Added transfers object store for file transfer feature
 
 let dbInstance = null;
 
@@ -61,6 +61,14 @@ export async function getDB() {
           autoIncrement: true
         });
         chatStore.createIndex('timestamp', 'timestamp', { unique: false });
+      }
+
+      // Create transfers store if it doesn't exist (version 3+)
+      if (!db.objectStoreNames.contains('transfers')) {
+        console.log('Creating transfers object store');
+        const transferStore = db.createObjectStore('transfers', { keyPath: 'id' });
+        transferStore.createIndex('timestamp', 'timestamp', { unique: false });
+        transferStore.createIndex('type', 'type', { unique: false });
       }
     };
   });
