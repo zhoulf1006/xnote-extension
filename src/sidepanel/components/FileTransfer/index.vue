@@ -12,14 +12,23 @@
       <div class="header-actions">
         <SyncStatus
           :is-syncing="store.isSyncing"
-          :is-checking="store.isChecking"
           :pending-count="store.pendingItemsCount"
-          :last-sync-time="store.lastSyncTime"
-          :error="store.syncError"
-          :is-timeout="store.isTimeout"
           @sync="handleSync"
         />
       </div>
+    </div>
+
+    <!-- Sync status line -->
+    <div v-if="googleDriveStore.isConnected" class="sync-status-line">
+      <span v-if="store.isSyncing" class="status syncing">
+        <i class="fas fa-sync-alt fa-spin"></i> Syncing...
+      </span>
+      <span v-else-if="store.isTimeout" class="status timeout">
+        Last sync timeout
+      </span>
+      <span v-else-if="store.lastSyncTime" class="status success">
+        Last sync: {{ formatSyncTime(store.lastSyncTime) }}
+      </span>
     </div>
 
     <!-- Connection requirement -->
@@ -125,13 +134,21 @@ const currentUploadProgress = computed(() => {
   return uploads[uploads.length - 1];
 });
 
+// Format sync time as MM-dd hh:mm:ss
+const formatSyncTime = (timestamp) => {
+  const date = new Date(timestamp);
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  const seconds = String(date.getSeconds()).padStart(2, '0');
+  return `${month}-${day} ${hours}:${minutes}:${seconds}`;
+};
+
 // Event handlers
 const handleSync = async () => {
-  try {
-    await store.sync();
-  } catch (error) {
-    console.error('Sync failed:', error);
-  }
+  // sync() handles errors internally and updates state
+  await store.sync();
 };
 
 const handleDeviceNameUpdate = (name) => {
@@ -242,6 +259,35 @@ watch(() => googleDriveStore.isConnected, async (connected) => {
 .header-actions {
   display: flex;
   gap: 8px;
+}
+
+/* Sync status line */
+.sync-status-line {
+  font-size: 11px;
+  padding: 2px 0;
+  margin-bottom: 0;
+}
+
+.sync-status-line .status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.sync-status-line .status.success {
+  color: #10b981;
+}
+
+.sync-status-line .status.timeout {
+  color: #fd7e14;
+}
+
+.sync-status-line .status.syncing {
+  color: #673ab7;
+}
+
+.sync-status-line .status i {
+  font-size: 10px;
 }
 
 /* Tab navigation */

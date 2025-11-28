@@ -119,9 +119,8 @@ export const useFileTransferStore = defineStore('fileTransfer', {
 
         // 4. Do an initial sync if connected
         // Don't await - let it run in background
-        this.sync().catch(err => {
-          console.warn('Initial sync failed:', err);
-        });
+        // sync() handles all errors internally and updates state
+        this.sync();
 
         console.log('File transfer store initialized, device:', this.deviceId, this.deviceName);
       } catch (error) {
@@ -183,9 +182,11 @@ export const useFileTransferStore = defineStore('fileTransfer', {
         if (error instanceof TimeoutError || error.isTimeout || error.name === 'TimeoutError') {
           this.isTimeout = true;
           this.syncError = 'Connection timeout';
+          console.log('[Check] Timeout - will retry later');
+        } else {
+          // Don't show error for check failures (expected when offline)
+          console.log('[Check] Skipped:', error.message);
         }
-        // Don't show error for check failures (expected when offline)
-        console.warn('Check for changes failed:', error.message);
       } finally {
         this.isChecking = false;
       }
@@ -196,6 +197,10 @@ export const useFileTransferStore = defineStore('fileTransfer', {
     /**
      * Full sync with Drive
      * Downloads all items and updates local cache
+     * Times out after 15 seconds
+     *
+     * Uses cancellable timeout pattern to avoid unhandled promise rejections
+     * that would appear in Chrome extension's Errors panel
      */
     async sync() {
       if (this.isSyncing) return;
@@ -204,9 +209,36 @@ export const useFileTransferStore = defineStore('fileTransfer', {
       this.syncError = null;
       this.isTimeout = false;
 
+      const SYNC_TIMEOUT = 15000;
+      let timeoutId = null;
+      let isTimedOut = false;
+
       try {
-        // Sync with Drive
-        const result = await transferService.sync(this.lastSyncTime);
+        // Create sync promise with cancellable timeout wrapper
+        const result = await new Promise((resolve, reject) => {
+          // Set timeout
+          timeoutId = setTimeout(() => {
+            isTimedOut = true;
+            reject({ isTimeout: true, message: 'Sync timed out after 15 seconds' });
+          }, SYNC_TIMEOUT);
+
+          // Start sync
+          transferService.sync(this.lastSyncTime)
+            .then(syncResult => {
+              if (!isTimedOut) {
+                clearTimeout(timeoutId);
+                resolve(syncResult);
+              }
+              // If timed out, silently ignore the result (no rejection = no error)
+            })
+            .catch(err => {
+              if (!isTimedOut) {
+                clearTimeout(timeoutId);
+                reject(err);
+              }
+              // If timed out, swallow the error (already handled by timeout)
+            });
+        });
 
         // Update local state with all active items
         this.items = result.items;
@@ -222,15 +254,17 @@ export const useFileTransferStore = defineStore('fileTransfer', {
 
         console.log(`Sync complete: ${result.items.length} items`);
       } catch (error) {
-        console.error('Sync failed:', error);
         // Check if this is a timeout error
-        if (error instanceof TimeoutError || error.isTimeout || error.name === 'TimeoutError') {
+        if (error.isTimeout) {
           this.isTimeout = true;
           this.syncError = 'Connection timeout';
+          // Use log level to avoid Chrome extension error panel entries
+          console.log('[Sync] Timeout after 15 seconds');
         } else {
           this.syncError = error.message;
+          console.log('[Sync] Did not complete:', error.message);
         }
-        throw error;
+        // Don't throw - state is updated, UI will reflect the error
       } finally {
         this.isSyncing = false;
       }
