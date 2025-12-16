@@ -1,6 +1,43 @@
 {
   "models": [
     {
+      "name": "Deep Security",
+      "links": [
+        {
+          "name": "DS Github",
+          "url": "https://dsgithub.trendmicro.com/deep-security"
+        },
+        {
+          "name": "DS Help Center",
+          "url": "https://help.deepsecurity.trendmicro.com/aws/welcome.html"
+        },
+        {
+          "name": "DS Jira",
+          "url": "https://trendmicro.atlassian.net/jira/dashboards/11234"
+        },
+        {
+          "name": "DS Jenkins",
+          "url": "https://dslift.trendmicro.com"
+        },
+        {
+          "name": "Euraka Search",
+          "url": "https://eurekasearch.trendmicro.com/Home?type=corp"
+        },
+        {
+          "name": "TOI Wiki",
+          "url": "https://trendmicro.atlassian.net/wiki/spaces/DS/pages/273804343/Circus+Team+-+DSM+TOI"
+        },
+        {
+          "name": "TOI Task Status[Loong Zhou]",
+          "url": "https://trendmicro.atlassian.net/wiki/spaces/DS/pages/957550981/Task+Status+-+Loong+Zhou"
+        },
+        {
+          "name": "Hardware Inventory and IP Allocation Configuration",
+          "url": "https://trendmicro.atlassian.net/wiki/spaces/XCL/pages/976883769/Hardware+Inventory+and+IP+Allocation+Configuration"
+        }
+      ]
+    },
+    {
       "name": "DeepLearning",
       "links": [
         {
