@@ -8,7 +8,7 @@ import quickLinksService from './quickLinksService.js'
 
 export function useQuickLinks() {
   // Data refs
-  const segLinksData = ref(null)
+  const quickLinksData = ref(null)
   const error = ref(null)
   const loading = ref(false)
   const expandedCategory = ref(null)
@@ -67,18 +67,18 @@ export function useQuickLinks() {
   }
 
   // Data loading
-  const loadSegLinks = async () => {
+  const loadQuickLinks = async () => {
     try {
       loading.value = true
       error.value = null
-      segLinksData.value = await quickLinksService.getLinksData()
-      
+      quickLinksData.value = await quickLinksService.getLinksData()
+
       // Set first category as expanded by default (accordion behavior)
-      if (segLinksData.value?.models?.length > 0 && !expandedCategory.value) {
-        expandedCategory.value = segLinksData.value.models[0].name
+      if (quickLinksData.value?.models?.length > 0 && !expandedCategory.value) {
+        expandedCategory.value = quickLinksData.value.models[0].name
       }
     } catch (err) {
-      console.error('Error loading SEG links:', err)
+      console.error('Error loading QuickLinks:', err)
       error.value = quickLinksService.formatError(err)
     } finally {
       loading.value = false
@@ -95,7 +95,7 @@ export function useQuickLinks() {
 
     try {
       const newCategory = await quickLinksService.addCategory(newCategoryName.value.trim())
-      await loadSegLinks()
+      await loadQuickLinks()
       
       // Expand the newly added category
       expandedCategory.value = newCategory.name
@@ -126,7 +126,7 @@ export function useQuickLinks() {
 
     try {
       await quickLinksService.renameCategory(oldName, editingCategoryName.value.trim())
-      await loadSegLinks()
+      await loadQuickLinks()
       delete editingCategory[oldName]
       editingCategoryName.value = ''
       error.value = null
@@ -147,7 +147,7 @@ export function useQuickLinks() {
 
     try {
       await quickLinksService.deleteCategory(categoryName)
-      await loadSegLinks()
+      await loadQuickLinks()
       error.value = null
     } catch (err) {
       error.value = quickLinksService.formatError(err)
@@ -164,7 +164,7 @@ export function useQuickLinks() {
 
     try {
       await quickLinksService.addLink(categoryName, newLink.name.trim(), newLink.url.trim())
-      await loadSegLinks()
+      await loadQuickLinks()
       cancelAddLink(categoryName)
       error.value = null
     } catch (err) {
@@ -198,7 +198,7 @@ export function useQuickLinks() {
         editingLinkData.name.trim(), 
         editingLinkData.url.trim()
       )
-      await loadSegLinks()
+      await loadQuickLinks()
       delete editingLink[oldUrl]
       editingLinkData.name = ''
       editingLinkData.url = ''
@@ -221,7 +221,7 @@ export function useQuickLinks() {
 
     try {
       await quickLinksService.deleteLink(categoryName, linkUrl)
-      await loadSegLinks()
+      await loadQuickLinks()
       error.value = null
     } catch (err) {
       error.value = quickLinksService.formatError(err)
@@ -374,7 +374,7 @@ export function useQuickLinks() {
       )
 
       // Reload data to reflect changes
-      await loadSegLinks()
+      await loadQuickLinks()
 
       // Store the name before clearing
       const savedName = currentTabData.name
@@ -413,7 +413,7 @@ export function useQuickLinks() {
   const saveCurrentPageToCategory = async (categoryName) => {
     try {
       const savedLink = await quickLinksService.saveCurrentPage(categoryName)
-      await loadSegLinks()
+      await loadQuickLinks()
       
       // Send success notification
       await quickLinksService.sendNotification('notifyPageSaved', {
@@ -440,13 +440,13 @@ export function useQuickLinks() {
 
   // Save page dialog functionality
   const showSavePageDialog = (pageInfo) => {
-    if (!segLinksData.value?.models?.length) {
+    if (!quickLinksData.value?.models?.length) {
       error.value = 'No categories available. Please add a category first.'
       return
     }
     
     try {
-      const categoryName = quickLinksService.showSavePageDialog(pageInfo, segLinksData.value.models)
+      const categoryName = quickLinksService.showSavePageDialog(pageInfo, quickLinksData.value.models)
       if (categoryName) {
         savePageToCategory(categoryName, pageInfo.title, pageInfo.url)
       }
@@ -458,7 +458,7 @@ export function useQuickLinks() {
   const savePageToCategory = async (categoryName, title, url) => {
     try {
       await quickLinksService.addLink(categoryName, title, url)
-      await loadSegLinks()
+      await loadQuickLinks()
       
       // Send success notification
       await quickLinksService.sendNotification('notifyPageSaved', {
@@ -477,7 +477,7 @@ export function useQuickLinks() {
 
   // Initialize component
   const initialize = async () => {
-    await loadSegLinks()
+    await loadQuickLinks()
     
     // Listen for messages from background script
     if (typeof chrome !== 'undefined' && chrome.runtime) {
@@ -494,7 +494,7 @@ export function useQuickLinks() {
   const filteredModels = computed(() => {
     // If no search query, return all categories
     if (!searchQuery.value || searchQuery.value.trim() === '') {
-      return segLinksData.value?.models || []
+      return quickLinksData.value?.models || []
     }
 
     // Normalize search query for case-insensitive matching
@@ -503,7 +503,7 @@ export function useQuickLinks() {
     // Filter categories and their links
     const filtered = []
 
-    segLinksData.value?.models?.forEach(category => {
+    quickLinksData.value?.models?.forEach(category => {
       // Check if category name matches
       const categoryMatches = category.name.toLowerCase().includes(query)
 
@@ -562,7 +562,7 @@ export function useQuickLinks() {
 
   return {
     // State
-    segLinksData,
+    quickLinksData,
     error,
     loading,
     expandedCategory,
@@ -590,7 +590,7 @@ export function useQuickLinks() {
     toggleEditMode,
 
     // Data Methods
-    loadSegLinks,
+    loadQuickLinks,
 
     // Category Methods
     addCategory,

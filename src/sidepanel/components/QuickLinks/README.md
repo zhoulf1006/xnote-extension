@@ -1,6 +1,6 @@
-# SegLinks Component
+# QuickLinks Component
 
-The SegLinks component provides a comprehensive links management system for the Chrome extension sidebar. It allows users to organize bookmarks into categories with full CRUD operations and Chrome storage sync.
+The QuickLinks component provides a comprehensive links management system for the Chrome extension sidebar. It allows users to organize bookmarks into categories with full CRUD operations and Chrome storage sync.
 
 ## Features
 
@@ -33,23 +33,23 @@ The SegLinks component provides a comprehensive links management system for the 
 ## File Structure
 
 ```
-SegLinks/
-├── README.md           # This documentation
-├── index.vue          # Main component file
-├── styles.css         # Component-specific styles
-├── useSegLinks.js     # Composition API composable
-└── segLinksService.js # Local service wrapper
+QuickLinks/
+├── README.md            # This documentation
+├── index.vue            # Main component file
+├── styles.css           # Component-specific styles
+├── useQuickLinks.js     # Composition API composable
+└── quickLinksService.js # Local service wrapper
 ```
 
 ## Usage
 
 ```vue
 <template>
-  <SegLinks />
+  <QuickLinks />
 </template>
 
 <script setup>
-import SegLinks from './components/SegLinks/index.vue'
+import QuickLinks from './components/QuickLinks/index.vue'
 </script>
 ```
 

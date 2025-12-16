@@ -1,0 +1,13 @@
+{
+  "models": [
+    {
+      "name": "DeepLearning",
+      "links": [
+        {
+          "name": "Introduction to LLMs and the generative AI project lifecycle",
+          "url": "https://www.coursera.org/learn/generative-ai-with-llms/lecture/R0xbD/generating-text-with-transformers"
+        }
+      ]
+    }
+  ]
+}

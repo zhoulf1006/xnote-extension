@@ -83,7 +83,7 @@ class LinksService {
       
       // Fallback to default data from JSON file
       console.log('Loading default data from JSON file')
-      const response = await fetch('/data/seg_links.json')
+      const response = await fetch('/data/quick_links.json')
       if (!response.ok) {
         throw new Error('Failed to load default links data')
       }

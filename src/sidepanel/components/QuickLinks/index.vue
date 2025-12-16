@@ -52,11 +52,11 @@
       Loading links...
     </div>
 
-    <div v-else class="seglinks-container">
+    <div v-else class="quicklinks-container">
       <div v-for="model in filteredModels"
            :key="model.name"
-           class="seg-model">
-        <div class="seg-model-header"
+           class="quicklinks-category">
+        <div class="quicklinks-category-header"
              :class="{ 'collapsed': !isCategoryExpanded(model.name) }">
           <div class="model-header-content" @click="toggleModel(model.name)">
             <i class="fas"
@@ -161,19 +161,19 @@
           </div>
         </div>
 
-        <div class="seg-links-container"
+        <div class="quicklinks-list"
              :class="{ 'hidden': !isCategoryExpanded(model.name) }">
           <div v-for="link in model.links"
                :key="link.url"
-               class="seg-link-wrapper">
+               class="quicklink-wrapper">
             
             <!-- Normal link display -->
             <a v-if="!editingLink[link.url]"
                :href="link.url"
                target="_blank"
-               class="seg-link">
+               class="quicklink">
               <i class="fas fa-external-link-alt"></i>
-              <span class="seg-link-name">{{ link.name }}</span>
+              <span class="quicklink-name">{{ link.name }}</span>
             </a>
 
             <!-- Edit link form -->
@@ -242,7 +242,7 @@ import { useQuickLinks } from './useQuickLinks.js'
 // Destructure all composable methods and state
 const {
   // State
-  segLinksData,
+  quickLinksData,
   error,
   loading,
   expandedCategory,
@@ -255,8 +255,8 @@ const {
   newLink,
   editingLink,
   editingLinkData,
-  showAddCurrentTab,      // NEW
-  currentTabData,         // NEW
+  showAddCurrentTab,
+  currentTabData,
 
   // Search State
   searchQuery,
@@ -270,7 +270,7 @@ const {
   toggleEditMode,
 
   // Data Methods
-  loadSegLinks,
+  loadQuickLinks,
 
   // Category Methods
   addCategory,
@@ -287,7 +287,7 @@ const {
   cancelEditLink,
   deleteLink,
 
-  // Current Tab Methods  // NEW SECTION
+  // Current Tab Methods
   showAddCurrentTabForm,
   addCurrentTabLink,
   cancelAddCurrentTab,
