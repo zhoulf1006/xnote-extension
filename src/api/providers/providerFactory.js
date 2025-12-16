@@ -11,19 +11,20 @@ export class ProviderFactory {
    * Creates a configured client for the specified provider
    * @param {string} providerName - The name of the provider to create
    * @param {boolean} [allowEmptyKeys=false] - Whether to allow empty API keys (useful during setup)
-   * @returns {Promise<Object>} The configured client and provider configuration
+   * @returns {Promise<Object>} The configured client, provider configuration, and requiresConfiguration flag
    */
   static async createProvider(providerName, allowEmptyKeys = false) {
     const providerConfig = llmProviders[providerName];
-    
+
     if (!providerConfig) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
-    
-    // Get API key, allowing empty values in dev mode
-    const apiKey = await ProviderFactory.getApiKey(providerConfig, allowEmptyKeys);
+
+    // Get API key, allowing empty values (don't throw on missing key)
+    const apiKey = await ProviderFactory.getApiKey(providerConfig, true);
     let client = null;
-    
+    let requiresConfiguration = false;
+
     // Only create actual clients if we have a valid API key
     if (apiKey && apiKey !== 'dev-dummy-key') {
       switch (providerConfig.clientType) {
@@ -44,13 +45,15 @@ export class ProviderFactory {
       console.warn(`Creating mock client for ${providerName} in development mode (no API key provided)`);
       client = { _isDevelopmentMock: true };
     } else {
-      // In production with no API key, throw error
-      throw new Error(`API key required for provider: ${providerName}`);
+      // In production with no API key, return "requires configuration" state instead of throwing
+      console.warn(`Provider ${providerName} requires API key configuration`);
+      requiresConfiguration = true;
     }
-    
+
     return {
       client,
-      config: providerConfig
+      config: providerConfig,
+      requiresConfiguration
     };
   }
   

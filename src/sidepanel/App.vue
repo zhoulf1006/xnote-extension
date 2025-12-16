@@ -60,12 +60,18 @@
           <h3>API Key Configuration</h3>
           <p class="api-key-info">
             <i class="fas fa-info-circle"></i>
-            {{ isExtensionMode ? 
-              'API keys will be securely stored in your Chrome account storage.' : 
-              'In development mode, keys are read from environment variables.' 
+            {{ isExtensionMode ?
+              'API keys will be securely stored in your Chrome account storage.' :
+              'In development mode, keys are read from environment variables.'
             }}
           </p>
-          
+
+          <!-- Warning when selected provider is not configured -->
+          <div v-if="selectedProviderNeedsConfig && isExtensionMode" class="provider-config-warning">
+            <i class="fas fa-exclamation-triangle"></i>
+            <span>The selected provider requires an API key to be configured before use.</span>
+          </div>
+
           <!-- API Key inputs for all providers (always rendered but conditionally shown) -->
           <div v-show="selectedProvider === 'openai'">
             <ApiKeyInput
@@ -398,7 +404,8 @@ import {
   initializeStorage,
   checkStorage,
   storeSecureValue,
-  secureStorageService
+  secureStorageService,
+  migrateSyncToLocalStorage
 } from '@/api/storageService';
 import Chat from './components/Chat/index.vue';
 import QuickLinks from './components/QuickLinks/index.vue';
@@ -449,6 +456,19 @@ const providerKeyStatus = ref({
   deepseek: null,
   gemini: null,
   customized: null
+});
+
+// Computed property to check if the selected provider needs configuration
+const selectedProviderNeedsConfig = computed(() => {
+  const provider = selectedProvider.value;
+  if (!provider) return false;
+
+  // Check if we have status info for this provider
+  const status = providerKeyStatus.value[provider];
+
+  // If status is explicitly false or null, the provider is not configured
+  // Status is true when the API key is configured
+  return status === false || status === null;
 });
 
 // Custom provider configuration
@@ -618,6 +638,10 @@ onMounted(async () => {
     console.log('Initializing storage service...');
     const storageStatus = await initializeStorage();
     console.log('Storage initialization completed:', storageStatus);
+
+    // Migrate large mapping data from sync to local storage to avoid quota issues
+    await migrateSyncToLocalStorage();
+    console.log('✅ Storage migration check completed');
 
     // Note: LLM config store will initialize itself when accessed
     // The store maintains backward compatibility with localStorage access
@@ -1116,6 +1140,25 @@ const tabs = [
 .api-key-info i {
   margin-right: 5px;
   color: #2196f3;
+}
+
+/* Provider configuration warning */
+.provider-config-warning {
+  background-color: #fff3e0;
+  border: 1px solid #ffb74d;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e65100;
+}
+
+.provider-config-warning i {
+  color: #ff9800;
+  flex-shrink: 0;
 }
 
 /* Customized Provider Configuration */

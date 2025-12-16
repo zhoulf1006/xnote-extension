@@ -6,6 +6,14 @@ export async function streamChat(messages, {
   onError = () => {}
 } = {}) {
   try {
+    // Check if service requires configuration before attempting to chat
+    if (llmService.requiresConfiguration) {
+      throw new Error(
+        llmService.getConfigurationError() ||
+        'LLM service is not configured. Please set up your API key in the settings.'
+      );
+    }
+
     let fullResponse = '';
 
     // Ensure messages include system prompt if not present

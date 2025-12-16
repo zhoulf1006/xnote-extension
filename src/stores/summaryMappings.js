@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { getStoredValue, storeValue, STORAGE_KEYS } from '@/api/storageService';
+import { getLocalValue, storeLocalValue, STORAGE_KEYS } from '@/api/storageService';
 
 export const useSummaryMappings = defineStore('summaryMappings', {
   state: () => ({
@@ -10,13 +10,13 @@ export const useSummaryMappings = defineStore('summaryMappings', {
 
   actions: {
     /**
-     * Load mappings from storage
+     * Load mappings from storage (uses local storage for large data)
      */
     async loadMappings() {
       try {
-        this.folderMappings = await getStoredValue(STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS) || {};
-        this.fileMappings = await getStoredValue(STORAGE_KEYS.SUMMARY_FILE_MAPPINGS) || {};
-        this.uploadStatus = await getStoredValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS) || {};
+        this.folderMappings = await getLocalValue(STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS) || {};
+        this.fileMappings = await getLocalValue(STORAGE_KEYS.SUMMARY_FILE_MAPPINGS) || {};
+        this.uploadStatus = await getLocalValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS) || {};
       } catch (error) {
         console.error('Error loading summary mappings:', error);
         this.folderMappings = {};
@@ -38,7 +38,7 @@ export const useSummaryMappings = defineStore('summaryMappings', {
         sub: subCategory,
         folderId
       };
-      await storeValue(STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS, this.folderMappings);
+      await storeLocalValue(STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS, this.folderMappings);
     },
 
     /**
@@ -48,7 +48,7 @@ export const useSummaryMappings = defineStore('summaryMappings', {
      */
     async saveFileMapping(url, fileId) {
       this.fileMappings[url] = fileId;
-      await storeValue(STORAGE_KEYS.SUMMARY_FILE_MAPPINGS, this.fileMappings);
+      await storeLocalValue(STORAGE_KEYS.SUMMARY_FILE_MAPPINGS, this.fileMappings);
     },
 
     /**
@@ -86,7 +86,7 @@ export const useSummaryMappings = defineStore('summaryMappings', {
           lastUpdatedAt: now
         };
       }
-      await storeValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS, this.uploadStatus);
+      await storeLocalValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS, this.uploadStatus);
     },
 
     /**
@@ -114,9 +114,9 @@ export const useSummaryMappings = defineStore('summaryMappings', {
       this.folderMappings = {};
       this.fileMappings = {};
       this.uploadStatus = {};
-      await storeValue(STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS, {});
-      await storeValue(STORAGE_KEYS.SUMMARY_FILE_MAPPINGS, {});
-      await storeValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS, {});
+      await storeLocalValue(STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS, {});
+      await storeLocalValue(STORAGE_KEYS.SUMMARY_FILE_MAPPINGS, {});
+      await storeLocalValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS, {});
     },
 
     /**
@@ -125,7 +125,7 @@ export const useSummaryMappings = defineStore('summaryMappings', {
      */
     async clearUploadStatus() {
       this.uploadStatus = {};
-      await storeValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS, {});
+      await storeLocalValue(STORAGE_KEYS.SUMMARY_UPLOAD_STATUS, {});
       console.log('Cleared all summary upload status for re-uploading to new location');
     }
   }

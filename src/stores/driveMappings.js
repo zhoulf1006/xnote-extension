@@ -13,7 +13,7 @@
  */
 
 import { defineStore } from 'pinia';
-import { getStoredValue, storeValue } from '@/api/storageService';
+import { getLocalValue, storeLocalValue } from '@/api/storageService';
 
 const STORAGE_KEY = 'drive_location_mappings';
 
@@ -58,11 +58,11 @@ export const useDriveMappings = defineStore('driveMappings', {
 
   actions: {
     /**
-     * Load mappings from storage
+     * Load mappings from storage (uses local storage for large data)
      */
     async loadMappings() {
       try {
-        const stored = await getStoredValue(STORAGE_KEY);
+        const stored = await getLocalValue(STORAGE_KEY);
         if (stored) {
           this.locations = stored;
         }
@@ -73,11 +73,11 @@ export const useDriveMappings = defineStore('driveMappings', {
     },
 
     /**
-     * Save mappings to storage
+     * Save mappings to storage (uses local storage for large data)
      */
     async saveToStorage() {
       try {
-        await storeValue(STORAGE_KEY, this.locations);
+        await storeLocalValue(STORAGE_KEY, this.locations);
       } catch (error) {
         console.error('Error saving drive mappings:', error);
       }

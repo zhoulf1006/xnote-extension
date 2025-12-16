@@ -352,6 +352,14 @@ async function processScreenshot(imageData, cropData, source = 'screenshot') {
     // Extract base64 data
     const base64Data = screenshotService.extractBase64(processedImage);
 
+    // Check if LLM service requires configuration before attempting to analyze
+    if (llmService.requiresConfiguration) {
+      throw new Error(
+        llmService.getConfigurationError() ||
+        'LLM service is not configured. Please set up your API key in the settings.'
+      );
+    }
+
     // Use LLM service with the selected prompt (either text extraction or image description)
     const stream = await llmService.analyzeImage(base64Data, selectedPrompt.value, { stream: true });
 

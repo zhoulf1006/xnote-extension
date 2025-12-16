@@ -10,6 +10,8 @@ export class LLMService {
     this.providerInstance = null;
     this.config = null;
     this.isInitialized = false;
+    this.requiresConfiguration = false;
+    this.configurationError = null;
     this.initializationPromise = this.setProvider(savedProvider);
   }
 
@@ -20,25 +22,40 @@ export class LLMService {
     }
 
     this.currentProvider = providerName;
-    
+
     try {
       // Detect development mode
-      const isDevelopment = typeof window !== 'undefined' && 
-                          window.location && 
+      const isDevelopment = typeof window !== 'undefined' &&
+                          window.location &&
                           window.location.hostname === 'localhost';
-      
+
       // Create the provider instance, allowing empty keys in development mode
-      const { client, config } = await ProviderFactory.createProvider(
-        providerName, 
+      const { client, config, requiresConfiguration } = await ProviderFactory.createProvider(
+        providerName,
         isDevelopment // allowEmptyKeys = true in development mode
       );
-      
+
+      // Handle the "requires configuration" state (no API key in production)
+      if (requiresConfiguration) {
+        this.config = config;
+        this.requiresConfiguration = true;
+        this.isInitialized = false;
+        this.providerInstance = null;
+        this.configurationError = `API key not found for provider: ${config.name}. Configure it in the LLM Provider settings.`;
+        // Still save the provider selection so user's choice is remembered
+        localStorage.setItem(LLM_PROVIDER_STORAGE_KEY, providerName);
+        console.warn(`Provider ${providerName} requires configuration`);
+        return; // Don't throw, just return
+      }
+
       // If we have a real client, initialize the provider
       if (client) {
         const ProviderClass = getProviderImplementation(config.clientType);
         this.providerInstance = new ProviderClass(client, config);
         this.config = config;
         this.isInitialized = true;
+        this.requiresConfiguration = false;
+        this.configurationError = null;
       } else if (isDevelopment) {
         // In development with no API key, create a mock provider
         console.log(`Using mock provider for ${providerName} in development mode`);
@@ -47,15 +64,28 @@ export class LLMService {
         };
         this.config = { ...llmProviders[providerName], _isDevelopmentMock: true };
         this.isInitialized = true;
+        this.requiresConfiguration = false;
+        this.configurationError = null;
       }
-      
+
       // Save the current provider to localStorage
       localStorage.setItem(LLM_PROVIDER_STORAGE_KEY, providerName);
     } catch (error) {
       console.error(`Failed to initialize provider ${providerName}:`, error);
       this.isInitialized = false;
-      throw error;
+      this.requiresConfiguration = true;
+      this.configurationError = error.message;
+      // Still save the provider selection
+      localStorage.setItem(LLM_PROVIDER_STORAGE_KEY, providerName);
     }
+  }
+
+  /**
+   * Get the configuration error message if the service requires configuration
+   * @returns {string|null} The error message or null if configured
+   */
+  getConfigurationError() {
+    return this.configurationError;
   }
 
   async ensureInitialized() {

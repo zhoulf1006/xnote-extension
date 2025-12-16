@@ -356,6 +356,79 @@ export async function storeValue(key, value) {
 }
 
 /**
+ * Store a value using chrome.storage.local (for large data that may exceed sync quota)
+ * Falls back to localStorage in non-extension mode
+ * @param {string} key - Storage key
+ * @param {any} value - Value to store
+ * @returns {Promise<void>}
+ */
+export async function storeLocalValue(key, value) {
+  const extensionMode = isExtensionMode();
+
+  if (extensionMode) {
+    return new Promise((resolve, reject) => {
+      // Set a timeout in case the Chrome API hangs
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Chrome local storage API timeout after 3000ms'));
+      }, 3000);
+
+      chrome.storage.local.set({ [key]: value }, () => {
+        clearTimeout(timeoutId);
+
+        if (chrome.runtime.lastError) {
+          console.error('Error storing value in Chrome local storage:', chrome.runtime.lastError);
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          console.log(`Successfully stored value for key: ${key} in Chrome local storage`);
+          resolve();
+        }
+      });
+    });
+  } else {
+    // Fall back to localStorage in development mode
+    const storage = getDevStorage();
+    storage[key] = value;
+    saveDevStorage(storage);
+    console.log(`Value for ${key} stored in localStorage (development mode - local)`);
+    return Promise.resolve();
+  }
+}
+
+/**
+ * Get a value from chrome.storage.local (for large data)
+ * Falls back to localStorage in non-extension mode
+ * @param {string} key - Storage key
+ * @returns {Promise<any>} The stored value
+ */
+export async function getLocalValue(key) {
+  const extensionMode = isExtensionMode();
+
+  if (extensionMode) {
+    return new Promise((resolve, reject) => {
+      // Set a timeout in case the Chrome API hangs
+      const timeoutId = setTimeout(() => {
+        reject(new Error('Chrome local storage API timeout after 3000ms'));
+      }, 3000);
+
+      chrome.storage.local.get([key], (result) => {
+        clearTimeout(timeoutId);
+
+        if (chrome.runtime.lastError) {
+          console.error('Error getting value from Chrome local storage:', chrome.runtime.lastError);
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(result[key]);
+        }
+      });
+    });
+  } else {
+    // Fall back to localStorage in development mode
+    const storage = getDevStorage();
+    return Promise.resolve(storage[key]);
+  }
+}
+
+/**
  * Check if a key is configured
  * @param {string} key - The key to check
  * @param {string} envFallback - The environment variable name to use as fallback
@@ -468,15 +541,41 @@ export async function checkStorage() {
 
 /**
  * Initialize the storage service
- * This should be called when the application starts 
+ * This should be called when the application starts
  */
 export async function initializeStorage() {
+  // CRITICAL: First, clean up any large keys from sync storage that might be causing quota issues
+  // This must happen BEFORE any other storage operations to prevent quota exceeded errors
+  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
+    const problematicKeys = [
+      'drive_location_mappings',
+      STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS,
+      STORAGE_KEYS.SUMMARY_FILE_MAPPINGS,
+      STORAGE_KEYS.SUMMARY_UPLOAD_STATUS
+    ];
+
+    console.log('🧹 Cleaning up potential large keys from sync storage...');
+
+    // Fire-and-forget cleanup - start immediately, don't block on it
+    try {
+      chrome.storage.sync.remove(problematicKeys, () => {
+        if (chrome.runtime.lastError) {
+          console.warn('Cleanup note:', chrome.runtime.lastError.message);
+        } else {
+          console.log('✅ Cleaned problematic keys from sync storage');
+        }
+      });
+    } catch (e) {
+      console.warn('Could not initiate sync storage cleanup:', e);
+    }
+  }
+
   // Check if we're running in an extension context
   const isExtUrl = isExtensionURL();
-  
+
   if (isExtUrl) {
     console.log('Extension URL detected, initializing Chrome storage API...');
-    
+
     // Single wait with sufficient timeout
     const apiAvailable = await waitForChromeAPI(3000);
     
@@ -842,10 +941,17 @@ function mapProviderToStorageKey(providerName) {
 /**
  * Gets the API key for a provider
  * @param {Object} providerConfig - The provider configuration
- * @param {boolean} allowEmpty - Whether to allow empty API keys (default: false)
- * @returns {Promise<string>} The API key
+ * @param {boolean|Object} options - If boolean, treated as allowEmpty for backward compatibility.
+ *   If object, can have: { allowEmpty: boolean, throwOnMissing: boolean }
+ * @returns {Promise<string|null>} The API key, empty string, or null if not found and throwOnMissing is false
  */
-export async function getApiKey(providerConfig, allowEmpty = false) {
+export async function getApiKey(providerConfig, options = {}) {
+  // Handle backward compatibility: if options is a boolean, treat it as allowEmpty
+  const { allowEmpty = false, throwOnMissing = false } =
+    typeof options === 'boolean'
+      ? { allowEmpty: options, throwOnMissing: false }
+      : options;
+
   const mappedKey = mapProviderToStorageKey(providerConfig.name.toLowerCase());
 
   // Use local getSecureValue function (no import needed)
@@ -862,10 +968,101 @@ export async function getApiKey(providerConfig, allowEmpty = false) {
     return apiKey || '';
   }
 
-  if (!apiKey) {
+  // If no API key and throwOnMissing is explicitly set, throw an error
+  if (!apiKey && throwOnMissing) {
     throw new Error(`API key not found for provider: ${providerConfig.name}.
       Configure it in the LLM Provider settings.`);
   }
 
-  return apiKey;
+  // Return null for missing keys instead of throwing (lazy initialization support)
+  return apiKey || null;
+}
+
+/**
+ * Migrate large mapping data from chrome.storage.sync to chrome.storage.local
+ * This helps avoid quota exceeded errors for growing data
+ * Should be called once during app initialization
+ * @returns {Promise<void>}
+ */
+export async function migrateSyncToLocalStorage() {
+  if (!isExtensionMode()) {
+    console.log('Migration not needed in development mode');
+    return;
+  }
+
+  const keysToMigrate = [
+    'drive_location_mappings',
+    STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS,
+    STORAGE_KEYS.SUMMARY_FILE_MAPPINGS,
+    STORAGE_KEYS.SUMMARY_UPLOAD_STATUS
+  ];
+
+  console.log('Checking for data to migrate from sync to local storage...');
+
+  for (const key of keysToMigrate) {
+    try {
+      // Try to get from sync storage
+      const syncValue = await new Promise((resolve) => {
+        chrome.storage.sync.get([key], (result) => {
+          if (chrome.runtime.lastError) {
+            console.warn(`Could not read ${key} from sync storage:`, chrome.runtime.lastError);
+            resolve(undefined);
+          } else {
+            resolve(result[key]);
+          }
+        });
+      });
+
+      // ALWAYS try to remove the key from sync storage, regardless of whether migration succeeded
+      // This is critical to free up quota space
+      const removeFromSync = () => {
+        return new Promise((resolve) => {
+          chrome.storage.sync.remove(key, () => {
+            if (chrome.runtime.lastError) {
+              console.warn(`Could not remove ${key} from sync storage:`, chrome.runtime.lastError);
+            } else {
+              console.log(`✅ Removed ${key} from sync storage`);
+            }
+            resolve();
+          });
+        });
+      };
+
+      if (syncValue !== undefined && syncValue !== null) {
+        // Check if it's not empty
+        const hasData = typeof syncValue === 'object'
+          ? Object.keys(syncValue).length > 0
+          : Boolean(syncValue);
+
+        if (hasData) {
+          try {
+            // Store in local storage
+            await storeLocalValue(key, syncValue);
+            console.log(`Migrated ${key} from sync to local storage`);
+          } catch (storeError) {
+            console.warn(`Failed to store ${key} in local storage:`, storeError);
+          }
+        }
+      }
+
+      // Always remove from sync to free quota (even if we couldn't read it or store it)
+      await removeFromSync();
+
+    } catch (error) {
+      console.warn(`Could not migrate ${key}:`, error);
+
+      // Even on error, try to remove the key from sync storage
+      try {
+        chrome.storage.sync.remove(key, () => {
+          if (!chrome.runtime.lastError) {
+            console.log(`✅ Removed ${key} from sync storage (after error)`);
+          }
+        });
+      } catch (e) {
+        // Ignore
+      }
+    }
+  }
+
+  console.log('Migration check completed');
 } 
