@@ -165,9 +165,8 @@ class GoogleDriveService {
       // Clear folder browser cache
       googleFolderBrowserService.clearCache();
 
-      // Clear all storage keys including custom location settings
+      // Clear authentication and sync state (preserve folder ID for reconnection)
       await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_CONNECTED, false);
-      await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_FOLDER_ID, null);
       await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_SYNC_ENABLED, false);
       await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_LAST_SYNC, null);
       await storeValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID, null);
