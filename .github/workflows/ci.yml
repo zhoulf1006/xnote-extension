@@ -1,0 +1,35 @@
+name: Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks: # this job id is the required-status-check context name
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # pnpm must be set up before setup-node: cache 'pnpm' probes the pnpm store path
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          # Node 20, not newer: canvas@2.11.2 (icon generation devDependency) has no
+          # prebuilt binary past Node 20 and would need cairo system libs to compile.
+          # The test/build steps use no version-sensitive node builtins (verified:
+          # no node:sqlite/node:test/node:* imports in src/ or tests/).
+          node-version: 20
+          cache: 'pnpm'
+
+      - run: pnpm install --frozen-lockfile
+      # No typecheck step: the project has no typecheck script (plain JS, no tsc/vue-tsc).
+      - run: pnpm test
+      - run: pnpm run build
