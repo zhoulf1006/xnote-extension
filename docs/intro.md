@@ -11,7 +11,7 @@ XNote Extension is an AI-powered Chrome extension for note-taking and productivi
 ## Features
 
 ### AI Chat
-- Chat with multiple AI providers (OpenAI, Google Gemini, DeepSeek, Azure OpenAI)
+- Chat with multiple AI providers, including OpenAI, Google Gemini, and DeepSeek, plus custom OpenAI-compatible endpoints
 - Streaming responses for real-time interaction
 - Chat history management with IndexedDB storage
 - Support for custom LLM endpoints
@@ -24,7 +24,6 @@ XNote Extension is an AI-powered Chrome extension for note-taking and productivi
 ### Translation
 - Real-time AI translation
 - Multiple language support
-- Text-to-speech with Azure Speech Service
 
 ### Screen Capture & Analysis
 - Capture screenshots for AI analysis
