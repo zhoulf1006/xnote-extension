@@ -1,3 +1,5 @@
+import { resolveModelFor } from '../modelConfigService';
+
 /**
  * Provider implementation for Google's Gemini API
  */
@@ -88,8 +90,13 @@ export class GeminiProvider {
         parts.push({ text: prompt });
       }
 
+      // Resolve the model per request so the user's selection applies immediately
+      const hasImages = Array.isArray(lastMessage.content) &&
+        lastMessage.content.some(item => item.type === 'image' || item.type === 'image_url');
+      const model = await resolveModelFor(this.config.key, hasImages ? 'vision' : 'chat');
+
       // Send message and get streaming response
-      const result = await this.client.generateContentStream(parts);
+      const result = await this.client.getGenerativeModel({ model }).generateContentStream(parts);
 
       for await (const chunk of result.stream) {
         yield {

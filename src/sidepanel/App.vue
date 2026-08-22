@@ -100,6 +100,26 @@
                 <p class="field-hint">Enter the base URL for your OpenAI-compatible API endpoint</p>
               </div>
 
+              <div class="ms-assist-row">
+                <button type="button"
+                        class="ms-fetch-assist"
+                        :disabled="modelFetch.customized === 'loading'"
+                        @click="fetchCustomizedModels">
+                  <i class="fas fa-sync" :class="{ 'fa-spin': modelFetch.customized === 'loading' }"></i>
+                  <span>{{ modelList.customized ? 'Refresh models from endpoint' : 'Fetch models from endpoint' }}</span>
+                </button>
+              </div>
+              <div v-if="customizedNote" class="ms-note" :class="'ms-note-' + customizedNote.type">
+                <i class="fas" :class="customizedNote.icon"></i>
+                <span>{{ customizedNote.text }}</span>
+              </div>
+              <p v-else-if="modelList.customized" class="field-hint">
+                {{ modelList.customized.models.length }} models loaded from /models — the capability dropdowns below offer them as suggestions.
+              </p>
+              <p v-else class="field-hint">
+                Loads /models from the endpoint to offer suggestions; manual entry always works.
+              </p>
+
               <ApiKeyInput
                 id="customized-key"
                 label="API Key"
@@ -120,12 +140,12 @@
                     <input type="checkbox" v-model="customConfig.capabilities.chat.enabled">
                     <span>Chat</span>
                   </label>
-                  <input
+                  <ModelSelect
                     v-if="customConfig.capabilities.chat.enabled"
-                    type="text"
-                    v-model="customConfig.capabilities.chat.model"
-                    placeholder="Model name (e.g., gpt-4o)"
-                    class="model-input"
+                    :model-value="customConfig.capabilities.chat.model || null"
+                    :options="modelList.customized?.models || []"
+                    placeholder="Model ID (e.g., gpt-4o)"
+                    @update:model-value="v => customConfig.capabilities.chat.model = v || ''"
                   />
                 </div>
 
@@ -135,12 +155,12 @@
                     <input type="checkbox" v-model="customConfig.capabilities.vision.enabled">
                     <span>Vision (Image Analysis)</span>
                   </label>
-                  <input
+                  <ModelSelect
                     v-if="customConfig.capabilities.vision.enabled"
-                    type="text"
-                    v-model="customConfig.capabilities.vision.model"
-                    placeholder="Model name (e.g., gpt-4o)"
-                    class="model-input"
+                    :model-value="customConfig.capabilities.vision.model || null"
+                    :options="modelList.customized?.models || []"
+                    placeholder="Model ID (e.g., gpt-4o)"
+                    @update:model-value="v => customConfig.capabilities.vision.model = v || ''"
                   />
                 </div>
 
@@ -150,12 +170,12 @@
                     <input type="checkbox" v-model="customConfig.capabilities.speech.enabled">
                     <span>Speech (TTS)</span>
                   </label>
-                  <input
+                  <ModelSelect
                     v-if="customConfig.capabilities.speech.enabled"
-                    type="text"
-                    v-model="customConfig.capabilities.speech.model"
-                    placeholder="Model name (e.g., tts-1)"
-                    class="model-input"
+                    :model-value="customConfig.capabilities.speech.model || null"
+                    :options="modelList.customized?.models || []"
+                    placeholder="Model ID (e.g., tts-1)"
+                    @update:model-value="v => customConfig.capabilities.speech.model = v || ''"
                   />
                 </div>
               </div>
@@ -186,6 +206,36 @@
               @configuration-changed="providerKeyStatus.gemini = $event"
               :key="'gemini-' + configModalKey"
             />
+          </div>
+
+          <!-- Model selection for built-in providers (list fetched from the provider's API) -->
+          <div v-if="selectedProvider !== 'customized'" class="ms-config">
+            <div class="ms-field-label">
+              <span>Chat model</span>
+              <button type="button"
+                      class="ms-refresh"
+                      title="Refresh model list"
+                      :disabled="modelFetch[selectedProvider] === 'loading' || modelFetch[selectedProvider] === 'no-key'"
+                      @click="loadModelsFor(selectedProvider)">
+                <i class="fas fa-sync" :class="{ 'fa-spin': modelFetch[selectedProvider] === 'loading' }"></i>
+              </button>
+            </div>
+            <ModelSelect v-model="modelSelections[selectedProvider].chat"
+                         :options="currentModels"
+                         :disabled="modelFetch[selectedProvider] === 'loading'"
+                         placeholder="Select a model…" />
+            <template v-if="llmProviders[selectedProvider].supportsVision">
+              <div class="ms-field-label"><span>Vision model</span></div>
+              <ModelSelect v-model="modelSelections[selectedProvider].vision"
+                           :options="currentModels"
+                           null-label="Same as chat model"
+                           :disabled="modelFetch[selectedProvider] === 'loading'" />
+            </template>
+            <div v-if="modelNote" class="ms-note" :class="'ms-note-' + modelNote.type">
+              <i class="fas" :class="modelNote.icon"></i>
+              <span>{{ modelNote.text }}</span>
+            </div>
+            <div class="ms-hint">Default when nothing selected: {{ llmProviders[selectedProvider].defaultModel }}</div>
           </div>
         </div>
 
@@ -414,7 +464,9 @@ import Summary from './components/Summary/index.vue';
 import ScreenCapture from './components/ScreenCapture/index.vue';
 import FileTransfer from './components/FileTransfer/index.vue';
 import ApiKeyInput from './components/Common/ApiKeyInput.vue';
+import ModelSelect from './components/Common/ModelSelect.vue';
 import FolderBrowser from './components/FolderBrowser/index.vue';
+import { modelCatalogService, modelSelectionStore } from '@/api/modelConfigService';
 
 const navigationStore = useNavigationStore();
 const llmConfigStore = useLLMConfigStore();
@@ -471,6 +523,124 @@ const selectedProviderNeedsConfig = computed(() => {
   return status === false || status === null;
 });
 
+// Model selection state: per built-in provider {chat, vision} (null = not selected),
+// fetched model lists and fetch state per provider
+const BUILTIN_PROVIDERS = ['openai', 'deepseek', 'gemini'];
+const modelSelections = ref({
+  openai: { chat: null, vision: null },
+  deepseek: { chat: null, vision: null },
+  gemini: { chat: null, vision: null }
+});
+const modelList = ref({ openai: null, deepseek: null, gemini: null, customized: null });
+const modelFetch = ref({ openai: 'idle', deepseek: 'idle', gemini: 'idle', customized: 'idle' });
+let modelFetchSeq = 0; // guards against stale responses populating a switched-away provider
+
+const currentModels = computed(() => modelList.value[selectedProvider.value]?.models || []);
+
+const modelNote = computed(() => {
+  const provider = selectedProvider.value;
+  if (provider === 'customized') return null;
+  const state = modelFetch.value[provider];
+  const cached = modelList.value[provider];
+  if (state === 'loading') return { type: 'info', icon: 'fa-sync fa-spin', text: 'Fetching model list…' };
+  if (state === 'auth-error') return { type: 'err', icon: 'fa-exclamation-triangle', text: 'Couldn\'t fetch models — the API key was rejected. Check the key above, or enter a model ID manually.' };
+  if (state === 'fetch-error') {
+    return cached
+      ? { type: 'warn', icon: 'fa-exclamation-triangle', text: `Couldn't refresh — showing cached list (fetched ${formatSyncTime(cached.fetchedAt)}). Manual entry still works.` }
+      : { type: 'warn', icon: 'fa-exclamation-triangle', text: 'Couldn\'t fetch the model list — check your connection. Manual entry still works.' };
+  }
+  if (state === 'no-key') return { type: 'info', icon: 'fa-info-circle', text: 'Configure an API key to load the model list. You can still enter a model ID manually.' };
+  if (state === 'loaded' && currentModels.value.length === 0) return { type: 'info', icon: 'fa-info-circle', text: 'The API returned no usable models — enter a model ID manually.' };
+  return null;
+});
+
+const customizedNote = computed(() => {
+  const state = modelFetch.value.customized;
+  if (state === 'loading') return { type: 'info', icon: 'fa-sync fa-spin', text: 'Fetching model list…' };
+  if (state === 'auth-error') return { type: 'err', icon: 'fa-exclamation-triangle', text: 'Couldn\'t fetch models — the API key was rejected. Check the key, or enter model IDs manually.' };
+  if (state === 'fetch-error') return { type: 'warn', icon: 'fa-exclamation-triangle', text: 'Couldn\'t fetch models from the endpoint. Check the base URL — manual entry still works.' };
+  if (state === 'no-baseurl') return { type: 'info', icon: 'fa-info-circle', text: 'Enter a base URL first, then fetch models.' };
+  return null;
+});
+
+const loadModelsFor = async (provider) => {
+  if (provider === 'customized') return;
+  const apiKey = (apiKeys.value[provider] || '').trim();
+  if (!apiKey) {
+    modelFetch.value[provider] = 'no-key';
+    return;
+  }
+  const seq = ++modelFetchSeq;
+  modelFetch.value[provider] = 'loading';
+  try {
+    const entry = await modelCatalogService.fetchModels(provider, {
+      apiKey,
+      baseURL: llmProviders[provider].baseURL
+    });
+    if (seq !== modelFetchSeq) return; // a newer fetch superseded this one
+    modelList.value[provider] = entry;
+    modelFetch.value[provider] = 'loaded';
+  } catch (error) {
+    if (seq !== modelFetchSeq) return;
+    modelFetch.value[provider] = error.name === 'ModelListAuthError' ? 'auth-error' : 'fetch-error';
+  }
+};
+
+const fetchCustomizedModels = async () => {
+  const baseURL = (customConfig.value.baseURL || '').trim();
+  if (!baseURL) {
+    modelFetch.value.customized = 'no-baseurl';
+    return;
+  }
+  const apiKey = (apiKeys.value.customized || '').trim();
+  const seq = ++modelFetchSeq;
+  modelFetch.value.customized = 'loading';
+  try {
+    const entry = await modelCatalogService.fetchModels('customized', { apiKey, baseURL });
+    if (seq !== modelFetchSeq) return;
+    modelList.value.customized = entry;
+    modelFetch.value.customized = 'loaded';
+  } catch (error) {
+    if (seq !== modelFetchSeq) return;
+    modelFetch.value.customized = error.name === 'ModelListAuthError' ? 'auth-error' : 'fetch-error';
+  }
+};
+
+// Load stored selections + cached lists, then auto-fetch for the visible provider.
+// Each read is guarded: on a storage failure the in-memory value is kept, so a
+// transient error can't reset selections to defaults that Save would then persist.
+const loadModelConfig = async () => {
+  for (const provider of BUILTIN_PROVIDERS) {
+    try {
+      modelSelections.value[provider] = await modelSelectionStore.getSelections(provider);
+    } catch (error) {
+      console.warn(`Could not load model selection for ${provider}, keeping current values:`, error);
+    }
+    modelFetch.value[provider] = 'idle';
+  }
+  modelFetch.value.customized = 'idle';
+  for (const provider of [...BUILTIN_PROVIDERS, 'customized']) {
+    if (!modelList.value[provider]) {
+      try {
+        const cached = await modelCatalogService.readCache(provider);
+        if (cached) modelList.value[provider] = cached;
+      } catch (error) {
+        console.warn(`Could not read cached model list for ${provider}:`, error);
+      }
+    }
+  }
+  if (selectedProvider.value !== 'customized') {
+    loadModelsFor(selectedProvider.value);
+  }
+};
+
+// Auto-fetch when switching provider inside the open modal
+watch(selectedProvider, (provider) => {
+  if (showConfig.value && provider !== 'customized') {
+    loadModelsFor(provider);
+  }
+});
+
 // Custom provider configuration
 const customConfig = ref({
   baseURL: '',
@@ -524,9 +694,12 @@ const loadStoredApiKeys = async () => {
 const openConfigModal = async () => {
   showConfig.value = true;
   configModalKey.value++; // Force component re-render
-  
+
   // Load stored API keys when modal opens
   await loadStoredApiKeys();
+
+  // Load model selections + cached lists, auto-fetch for the visible provider
+  await loadModelConfig();
 };
 
 // Add click handler to the config nav item
@@ -841,6 +1014,12 @@ const saveConfig = async () => {
       promises.push(storeValue(STORAGE_KEYS.CUSTOMIZED_CONFIG, JSON.stringify(customConfig.value)));
       console.log('  - Saving Customized provider configuration');
     }
+
+    // Save model selections for built-in providers
+    for (const provider of BUILTIN_PROVIDERS) {
+      promises.push(modelSelectionStore.setSelections(provider, modelSelections.value[provider]));
+    }
+    console.log('  - Saving model selections');
     
     // Save all API keys first
     if (promises.length > 0) {
@@ -1246,6 +1425,123 @@ const tabs = [
   outline: none;
   border-color: #2196f3;
   box-shadow: 0 0 0 2px rgba(33, 150, 243, 0.1);
+}
+
+/* Model selection rows (config modal) */
+.ms-config {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid #ddd;
+}
+
+.ms-field-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 600;
+  color: #333;
+  margin: 12px 0 5px;
+}
+
+.ms-field-label:first-child {
+  margin-top: 0;
+}
+
+.ms-refresh {
+  width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: transparent;
+  color: #673ab7;
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+
+.ms-refresh:hover {
+  background: rgba(103, 58, 183, 0.12);
+}
+
+.ms-refresh:disabled {
+  color: #adb5bd;
+  cursor: default;
+}
+
+.ms-refresh:disabled:hover {
+  background: transparent;
+}
+
+.ms-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11.5px;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin: 6px 0;
+  line-height: 1.4;
+}
+
+.ms-note i {
+  flex: none;
+  margin-top: 1px;
+}
+
+.ms-note-err {
+  background: #ffeaea;
+  color: #c62828;
+}
+
+.ms-note-warn {
+  background: #fff3cd;
+  color: #8a6d1a;
+}
+
+.ms-note-info {
+  background: #f0f8ff;
+  color: #1565c0;
+}
+
+.ms-hint {
+  font-size: 11px;
+  color: #666;
+  margin-top: 4px;
+}
+
+.ms-assist-row {
+  margin: 10px 0 4px;
+}
+
+.ms-fetch-assist {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #ba92ff;
+  background: transparent;
+  color: #673ab7;
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 5px 10px;
+  cursor: pointer;
+}
+
+.ms-fetch-assist:hover:not(:disabled) {
+  background: #ba92ff;
+  color: #fff;
+}
+
+.ms-fetch-assist:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.capability-item .ms-combo {
+  flex: 1;
+  min-width: 140px;
+  margin-bottom: 0;
 }
 
 /* Google Drive Storage Section */
