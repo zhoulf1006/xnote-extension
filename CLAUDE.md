@@ -4,212 +4,79 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-XNote Extension is an AI-powered Chrome extension for note-taking and productivity. It's a fork of hn-sidebar-vue with focus on productivity tools, removing HackerNews and Finance features.
+XNote Extension is an AI-powered Chrome extension for note-taking and productivity, built with Vue 3 + Pinia + Vite. It runs in Chrome's side panel (Manifest V3), opened via Ctrl/Cmd+G or the toolbar icon.
 
 ## Development Commands
 
-### Core Development
 ```bash
-# Start development server (port 3100)
-pnpm run dev
-
-# Build for production
-pnpm run build
-
-# Generate extension icons
-node scripts/generate-icons.js
-
-# Package extension with timestamp
-make pack
+pnpm run dev      # Dev server on port 3100 (runs as a plain web app, auto-opens sidepanel.html)
+pnpm run build    # Production build — runs the custom build.js, NOT plain `vite build`
+make pack         # Build + strip the manifest `key` for Chrome Web Store + zip into pack/ with timestamp
+make dev-pack     # Build + zip with the dev manifest (keeps the `key` field)
 ```
 
-### Package Management
-- **Always use pnpm** for package management
-- Dependencies include Vue 3, Pinia, Vite, and Chrome extension APIs
+- Always use pnpm for package management.
 
-## Architecture Overview
+## Architecture
 
-### Chrome Extension Structure
-- **Manifest V3**: Modern Chrome extension with side panel API
-- **Background Service Worker**: Handles context menus, tab management, and cross-tab communication
-- **Content Script**: Page content extraction and notification system
-- **Side Panel**: Main Vue application accessible via Ctrl/Cmd+G
+### Extension Structure
+- **Side panel** (`sidepanel.html` → `src/sidepanel/`): the main Vue app. `src/sidepanel/App.vue` owns tab navigation and the LLM Config / Storage & Sync modals.
+- **Background service worker** (`background.js`): context menus ("Summary Page", "Save to Quick Links"), screenshot orchestration, Google Drive auth relay, transfer-sync alarm (30s tick), notification delivery to content scripts with injection + retry.
+- **Content scripts**: `src/content.js` (declared in manifest; page content extraction, save-success toasts), `src/content-scripts/screenshot-overlay.js` (injected on demand for area selection).
+
+### Feature Tabs
+- **Chat**: streaming AI conversation, history in IndexedDB.
+- **Capture**: screenshot area selection or clipboard paste → vision-capable LLM extracts text/insights.
+- **Translate**: AI translation.
+- **Summary**: summarizes current page (also via context menu), favorites, category-based export to Google Drive.
+- **Quick Links**: bookmark manager with categories, seeded from `public/data/quick_links.json`.
+- **Transfer**: cross-device text/file transfer using Google Drive as relay — a `manifest.json` on Drive is the source of truth, items expire after 30 days.
+
+### Multi-Provider LLM System
+- Registry: `src/config/llmProviders.js` — OpenAI, DeepSeek, Gemini (default), and "Customized" (user-configured OpenAI-compatible endpoint with per-capability chat/vision/speech models).
+- Factory: `src/api/providers/providerFactory.js` creates provider instances; all implement `generateContent()` and `generateContentStream()`.
+- Selected provider: `src/stores/llmConfig.js` (persisted in localStorage); API key input UI: `src/sidepanel/components/Common/ApiKeyInput.vue`.
+- Model selection: chat/vision models per provider are picked in the config modal from live provider model lists (`src/api/modelCatalog.js` pure logic, `src/api/modelConfigService.js` storage/fetch bindings); providers resolve the model at request time with fallback to the registry `defaultModel`.
+
+### Storage Layers (three distinct ones)
+1. **`src/api/storageService.js`**: dual-mode key/value storage — Chrome storage in extension mode, localStorage in dev mode. Includes `secureStorageService` (AES-GCM encryption via `encryptionService.js`) for API keys.
+2. **IndexedDB** (`xnote-db` v3 via `src/stores/dbManager.js`): `favorites`, `chatHistory`, `transfers` object stores.
+3. **Google Drive** (`src/api/googleDriveService.js`): syncs chats/summaries/translations as markdown into `/chats`, `/summaries`, `/translations`; auto-sync every 30 min when enabled. URL↔folder/file ID mappings tracked in `src/stores/driveMappings.js`.
 
 ### Dual-Mode Development
-- **Extension Mode**: Chrome extension with encrypted storage via Chrome sync API
-- **Development Mode**: Standalone web app using localStorage and environment variables
-- **Environment Detection**: Automatic switching based on `chrome.storage` availability
+- **Extension mode**: Chrome storage, real Chrome APIs, encrypted key storage.
+- **Dev mode** (localhost): localStorage, API keys from `.env` (`VITE_*` vars), graceful fallback to a mock LLM service when keys are missing.
+- Detection is automatic (`isExtensionMode()` in `storageService.js`); most bugs that only reproduce in one mode trace back to this split.
 
-### Build System (Vite)
-- **Custom Plugin**: Handles Chrome extension file structure and asset processing
-- **File Processing**: Moves built files to correct extension directory structure
-- **Static Asset Copying**: Handles manifest.json, background.js, and public folder contents
-- **Production Variable Replacement**: Clears environment variables in production builds
+### Build System
+- `build.js` runs Vite then assembles `dist/` into extension layout: copies `manifest.json`, `background.js`, content scripts, icons, `public/data`, and moves the built HTML to `dist/sidepanel.html`.
+- Production builds blank all `VITE_*` env vars (see `vite.config.js` `define`) so keys are never inlined into shipped code.
 
-### State Management
-- **Pinia Stores**: Centralized state management for navigation, favorites, and LLM config
-- **Persistence**: Automatic localStorage sync with reactive updates
-- **Store Pattern**: Each feature has dedicated store with actions and getters
+## Invariants and Gotchas
 
-### API Integration Architecture
+- **Never store API keys unencrypted** — always go through `secureStorageService` / `storeSecureValue()`.
+- **Large mapping data goes in `chrome.storage.local`, not sync** — sync storage has tight quotas; `migrateSyncToLocalStorage()` exists for this reason.
+- **Transfer device ID must stay in `localStorage`, never sync storage** — each device needs its own identity (see `transferService.js`).
+- **Drive tokens are never persisted** — a fresh token is fetched per request via `chrome.identity.getAuthToken`; 401s retry once after clearing the cached token.
+- **All IndexedDB schema changes go through `dbManager.js`** — bumping the version anywhere else causes version conflicts between stores.
 
-#### Multi-Provider LLM System
-- **Provider Factory**: `src/api/providers/providerFactory.js` dynamically creates provider instances
-- **Provider Registry**: Maintains available providers with configuration
-- **Unified Interface**: All providers implement consistent `generateContent()` and `generateContentStream()` methods
-- **Supported Providers**: OpenAI (via Azure), Google Gemini 2.0 Flash, DeepSeek
+## Testing
 
-#### Secure Storage System
-- **Dual Storage**: `storageService.js` for basic data, `secureStorageService.js` for encrypted data
-- **Encryption**: Web Crypto API with AES-GCM encryption for sensitive data
-- **Key Management**: Automatic encryption/decryption with fallback to environment variables
-- **Extension Integration**: Uses Chrome sync storage for cross-device synchronization
-
-#### Content Processing
-- **Page Content Extraction**: Content script uses semantic selectors for main content
-- **Context Menu Integration**: Right-click actions for summarization and link saving
-- **Background Communication**: Message passing between content script, background, and side panel
-
-### Component Architecture
-
-#### Active Components (Kept from original)
-- **Chat**: AI conversation interface with streaming support
-- **Speech**: Azure Speech Service integration with audio export
-- **Translation**: Real-time AI translation with multi-provider support
-- **Summary**: Web content summarization with favorites system
-- **QuickLinks**: Bookmark management with categories (renamed from SegLinks)
-- **LLMTest**: Provider testing and debugging interface
-- **Common**: Shared components (ApiKeyInput, Separator, Tooltip)
-
-#### Removed Components
-- **HackerNews**: News aggregation (removed)
-- **Finance**: USD deposit calculator (removed)
-- **TodoList**: Task management with persistent storage (removed)
-
-#### Vue 3 Patterns
-- **Composition API**: All components use `<script setup>` syntax
-- **Reactive Patterns**: Extensive use of `ref()`, `reactive()`, and `computed()`
-- **Composables**: Reusable logic in `src/sidepanel/composables/`
-
-### Security Implementation
-- **API Key Encryption**: All sensitive data encrypted before storage
-- **Content Security Policy**: Strict CSP compliance
-- **Permission Minimization**: Only required Chrome permissions
-- **No External Dependencies**: Self-contained with minimal attack surface
-
-### Development Patterns
-
-#### Error Handling
-- **Comprehensive Error Boundaries**: All API calls wrapped with try-catch
-- **User-Friendly Messages**: Configuration guidance for setup issues
-- **Graceful Degradation**: Fallbacks for missing configurations
-
-#### Configuration Management
-- **Environment Variables**: Development mode uses `.env` file
-- **Chrome Storage**: Extension mode uses encrypted sync storage
-- **Fallback Chain**: Environment → Chrome storage → user input
-
-#### LLM Configuration Maintenance
-- **Provider Store**: `src/stores/llmConfig.js` manages selected provider with localStorage persistence
-- **Provider Registry**: `src/config/llmProviders.js` defines all available providers
-- **Dynamic Switching**: `setProvider()` updates both store state and LLM service instance
-- **Service Reinitialization**: `reinitializeService()` refreshes provider connection after API key changes
-- **Configuration UI**: `ApiKeyInput.vue` component handles secure API key input with real-time validation
-- **Key Management**: Automatic loading/validation of stored keys with visual status indicators
-- **Development Mode**: Graceful fallback to mock service when API keys unavailable in localhost
-- **Runtime Configuration**: Ability to switch and configure providers dynamically
-- **Fallback Mechanisms**: Auto-detect and suggest alternative providers if primary fails
-- **Configuration Validation**: Automatic validation of API keys and provider connectivity
-
-#### Testing Strategy
-- **Manual Testing**: Chrome extension environment testing
-- **Provider Testing**: Built-in LLM testing interface
-- **Cross-Environment**: Both extension and development mode validation
-
-## Special Considerations
-
-### Chrome Extension Development
-- **Manifest V3 Compliance**: Uses service workers instead of background pages
-- **Content Script Injection**: Dynamic injection with retry logic
-- **Side Panel API**: Modern Chrome extension UI pattern
-- **Cross-Tab Communication**: Background script message routing
-
-### Azure Speech Service
-- **Audio Format Handling**: MP3 output with HTML5 Audio primary, AudioContext fallback
-- **Voice Presets**: Pre-configured voices for different languages
-- **Export Functionality**: Save audio files without playback requirement
-
-### Build and Deployment
-- **Icon Generation**: Automated icon creation with note icon design
-- **Timestamped Packaging**: Automatic versioning for distribution
-- **Asset Processing**: Intelligent file movement for Chrome extension structure
-- **Production Hardening**: Environment variable clearing in builds
-
-## Important Naming Changes from Original
-
-### Branding
-- **Extension Name**: "XNote Extension" (was "HN Sidebar Vue")
-- **Package Name**: "xnote-extension" (was "hn-sidebar-vue")
-
-### Component Renaming
-- **SegLinks → QuickLinks**: All files and references updated
-- **useSegLinks → useQuickLinks**: Composable renamed
-- **segLinksService → quickLinksService**: Service renamed
-
-### Storage Keys
-- **LLM Provider**: `xnote-llm-provider` (was `hn-sidebar-llm-provider`)
-
-### DOM Elements
-- **Notification ID**: `#xnote-notification` (was `#hn-sidebar-notification`)
-- **Page Info**: `window.xnotePageInfo` (was `window.hnSidebarPageInfo`)
-
-### Navigation Updates
-- **Removed Tabs**: "HN" and "Finance" tabs removed from App.vue
-- **Renamed Tab**: "Links" renamed to "Quick Links" in display
-
-## Development Best Practices
-
-### Component Development
-- Use Vue 3 Composition API with `<script setup>`
-- Keep components focused and single-purpose
-- Use TypeScript-like JSDoc comments for better IDE support
-- Implement proper error boundaries
-
-### State Management
-- Use Pinia stores for global state
-- Keep component state local when possible
-- Implement proper persistence for user data
-- Use reactive patterns consistently
-
-### API Integration
-- Always use the provider factory pattern
-- Implement proper error handling
-- Provide user-friendly error messages
-- Use streaming responses where applicable
-
-### Security
-- Never store unencrypted API keys
-- Use Chrome's secure storage APIs
-- Validate all user inputs
-- Implement proper CSP headers
+- Unit tests run with Vitest: `pnpm test` (tests live under `tests/`; `vitest.config.js` keeps test runs from triggering the extension-files build plugin).
+- UI and provider connectivity are tested manually in both modes:
+  1. Dev mode: `pnpm run dev`, verify against localhost.
+  2. Extension mode: `pnpm run build`, load `dist/` unpacked at `chrome://extensions/`.
+- Verify context menus, encrypted storage, and Drive sync in extension mode — none of these exist in dev mode.
+- Create test files or scripts under the `tests/` folder.
 
 ## File Structure Reference
 
-Key directories and their purposes:
-- `src/api/`: API services and provider implementations
-- `src/api/providers/`: LLM provider implementations
-- `src/config/`: Configuration files (providers, voices)
-- `src/sidepanel/components/`: Vue components for features
-- `src/sidepanel/stores/`: Pinia state management
-- `src/stores/`: Additional Pinia stores
-- `public/icons/`: Generated extension icons
-- `scripts/`: Build and utility scripts
-
-## Testing the Extension
-
-1. **Development Mode**: Run `pnpm run dev` for hot-reload development
-2. **Extension Mode**: Build with `pnpm run build` and load unpacked in Chrome
-3. **Test all providers**: Use the LLM Test tab to verify configurations
-4. **Check storage**: Verify encrypted storage is working properly
-5. **Test context menus**: Right-click to test summary and save features
-- Create test files or scripts under tests folder.
+- `src/api/`: services (LLM, Google Drive, transfer, storage/encryption, screenshot, links)
+- `src/api/providers/`: LLM provider implementations + factory
+- `src/config/`: provider registry
+- `src/sidepanel/components/`: one directory per feature tab + `Common/` shared components
+- `src/sidepanel/composables/`: shared composition logic
+- `src/stores/`: Pinia stores + IndexedDB manager
+- `src/content-scripts/`: on-demand injected scripts
+- `public/`: icons and seed data copied into the build
+- `scripts/`: build utilities (icon generation, store manifest prep)
