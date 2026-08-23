@@ -1,12 +1,13 @@
-# 功能目录(Features)
+# Features
 
-本目录描述**当前版本已具备功能的现行行为**,面向人的产品全景。
-- 不变量:出现在本目录 = 当前版本可用;行为变更就地改写;功能移除删除文件。
-- 未来计划见 roadmap;历史见 git/Release Notes;实现与决策见 docs/adr。
-- 内容规则:只写用户可见行为,零实现细节。
-- 目录初建于 2026-08:存量功能(Chat/Capture/Translate/Summary/Quick Links/Transfer/Drive 同步)条目待逆向补齐;缺条目不代表功能不存在。
+Describes the **current behaviour of features that exist in this version**, written for people rather than for the build.
 
-| 功能 | 一句话 |
+- Invariant: present in this directory = available in the current version; behaviour changes are rewritten in place; a removed feature means a deleted file.
+- Roadmap items belong elsewhere; history lives in git and release notes; implementation decisions live in `docs/adr`.
+- Content rule: user-visible behaviour only, no implementation detail.
+- Catalog started 2026-08: pre-existing features (Chat, Capture, Translate, Summary, Quick Links, Transfer, Drive sync) still need backfilling — a missing entry does not mean a missing feature.
+
+| Feature | One line |
 |---|---|
-| [LLM 模型选择](llm-model-selection.md) | 在 LLM Config 弹窗按 provider 从实时拉取的列表选择 Chat/Vision 模型,或手输任意模型 ID |
-| [应用内提示与确认](notifications.md) | 操作结果以提示条显示,删除类操作有确认对话框,右键保存网页以列表选择分类 |
+| [LLM model selection](llm-model-selection.md) | Pick chat and vision models per provider from a live model list, or type any model ID |
+| [In-app messages and confirmations](notifications.md) | Results appear as toasts, destructive actions ask for confirmation, saving a page picks a category from a list |

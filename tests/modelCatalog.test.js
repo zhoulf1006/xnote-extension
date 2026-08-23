@@ -1,6 +1,6 @@
 /**
  * Model catalog service — list-models fetch/parse/filter/cache logic.
- * Coverage source: docs/specs/llm-model-selection.md「失败模式与边界」.
+ * Coverage source: the Failure Modes and Boundaries section of docs/specs/llm-model-selection.md.
  *
  * Known gaps (not testable at this seam — App.vue orchestration has no component-test
  * infrastructure; covered manually in the config modal, see docs/.workings/llm-model-selection):

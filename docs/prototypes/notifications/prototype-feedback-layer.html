@@ -1,28 +1,35 @@
 <!doctype html>
 <!--
-  原型:侧边栏反馈层(Direction A: 浮层提示条)
-  问题:替换全部 alert()(~34 处)与 prompt()(1 处)——Chrome 在扩展侧边栏里屏蔽原生弹窗。
-       提示条摆在哪、三种严重度长什么样、多条如何堆叠、超长文案如何断行、
-       自动消失与常驻如何区分、弹窗打开时提示条能否被看见、
-       以及取代 prompt() 的分类选择框长什么样?
-  语境外壳:XNote 侧边栏(48px 导航栏 + 内容区)为简化 mock,仅提供评判语境,非评判对象。
-  同页原因:提示条与选择框同属"覆盖在同一块窄面板上的反馈层",要并排看它们与面板、与既有弹窗的视觉关系。
-  演示基建(data-demo-harness,非设计的一部分,勿实现):
-    底部悬浮暗色 pill——触发各类提示、切换面板宽度、开关 LLM 配置弹窗;
-    真实触发来源是各功能的成功/失败结果与右键菜单动作,app 内无这些按钮。
-  图标注:原型内联描边图标示意;实现沿用项目 Font Awesome 类
-        (fa-circle-check / fa-triangle-exclamation / fa-circle-info / fa-xmark / fa-folder)。
+  Prototype: side panel feedback layer (Direction A: floating toasts)
+  Question: replace every alert() (~34 sites) and the one prompt() — Chrome suppresses
+       native dialogs in extension side panels. Where do toasts sit, what do the three
+       severities look like, how do several stack, how does an over-long message wrap,
+       how is auto-dismiss distinguished from persistent, can a toast still be seen
+       while a modal is open, and what does the category picker replacing prompt()
+       look like?
+  Context shell: the XNote side panel (48px rail + content area) is a simplified mock
+       that only supplies judging context; it is not the subject being judged.
+  Why one page: toasts and the picker are both part of the feedback layer that overlays
+       the same narrow panel, so their visual relationship to the panel and to the
+       existing modal has to be judged together.
+  Demo harness (data-demo-harness, NOT part of the design, do not implement):
+       the floating dark pill triggers each kind of message, switches panel width, and
+       opens the config modal; in the real app these are driven by the success/failure
+       of features and by the right-click menu, and no such buttons exist.
+  Icon note: this page inlines stroke icons; the implementation reuses the project's
+       Font Awesome classes (fa-circle-check / fa-triangle-exclamation / fa-circle-info /
+       fa-xmark / fa-folder).
 -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Prototype — 侧边栏反馈层(提示条 + 分类选择)</title>
+<title>Prototype — side panel feedback layer (toasts + category picker)</title>
 <style>
   * { box-sizing: border-box; }
   html, body { margin: 0; padding: 0; background: #e9e6f0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
   .stage { display: flex; justify-content: center; padding: 20px 0 120px; }
 
-  /* ===== 侧边栏外壳(语境 mock,非评判对象) ===== */
+  /* ===== Side panel shell (context mock, not judged) ===== */
   .panel { width: 420px; height: 560px; background: #f8f9fa; display: flex; box-shadow: 0 4px 24px rgba(0,0,0,.18); position: relative; overflow: hidden; }
   .rail { width: 48px; background: rgba(103,58,183,.15); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; flex: none; }
   .rail .ric { width: 48px; height: 48px; display: grid; place-items: center; color: rgba(0,0,0,.8); }
@@ -36,15 +43,16 @@
   .mock-line { height: 9px; border-radius: 5px; background: #eceef1; margin: 7px 0; }
   .w80 { width: 80%; } .w60 { width: 60%; } .w40 { width: 40%; }
 
-  /* ===== 提示条(评判对象一) =====
-     摆在面板底部、内容之上;不占布局、不推挤内容(窄面板里推挤代价太大)。
-     用两侧定位 + 自动外边距横向铺满,不用位移变换。 */
+  /* ===== Toasts (first subject being judged) =====
+     Sit at the panel bottom above the content; they take no layout space and never push
+     content down (layout shift is too costly in a panel this narrow). Stretched with
+     left/right positioning rather than a transform. */
   .toast-layer {
     position: absolute; left: 0; right: 0; bottom: 0;
     padding: 0 12px 12px 12px;
     display: flex; flex-direction: column; gap: 8px;
-    z-index: 1200;               /* 高于配置弹窗(1000):弹窗内的报错必须看得见 */
-    pointer-events: none;         /* 空白处不挡住下面的界面 */
+    z-index: 1200;               /* above the config modal (1000): errors raised inside it must stay visible */
+    pointer-events: none;         /* empty space stays click-through */
   }
   .toast {
     pointer-events: auto;
@@ -66,17 +74,17 @@
   }
   .toast .close:hover { opacity: 1; background: rgba(0,0,0,.07); }
 
-  /* 三种严重度:取值与既有 .ms-note / .status-badge 同一套语义色 */
+  /* Three severities, reusing the same semantic colours as the existing state notes */
   .toast.success { background: #e8f5e8; color: #2e7d32; border-color: #c8e6c9; }
   .toast.error   { background: #ffeaea; color: #c62828; border-color: #ffcdd2; }
   .toast.info    { background: #f0f8ff; color: #1565c0; border-color: #cfe5fb; }
 
-  /* 自动消失的:底部一条计时进度;常驻的(error)没有 */
+  /* Auto-dismissing toasts show a countdown bar; persistent ones (errors) do not */
   .toast .timer { position: absolute; left: 0; bottom: 0; height: 2px; background: currentColor; opacity: .35; border-radius: 0 0 6px 6px; animation: timer 4s linear forwards; }
   .toast { position: relative; overflow: hidden; }
   @keyframes timer { from { width: 100%; } to { width: 0%; } }
 
-  /* ===== 分类选择框(评判对象二,取代 prompt()) ===== */
+  /* ===== Category picker (second subject, replacing prompt()) ===== */
   .picker-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1100; }
   .picker { background: #fff; border-radius: 8px; width: calc(100% - 40px); max-width: 340px; max-height: calc(100% - 60px); display: flex; flex-direction: column; box-shadow: 0 4px 16px rgba(0,0,0,.1); overflow: hidden; }
   .picker h3 { margin: 0; padding: 14px 16px 10px; font-size: 14px; color: #333; }
@@ -89,7 +97,7 @@
   }
   .picker .opt .count { margin-left: auto; font-size: 11px; color: #999; }
   .picker .opt:hover { background: rgba(103,58,183,.07); }
-  .picker .opt.selected { background: rgba(103,58,183,.16); }  /* 选中比悬浮深一档,且源序在后 */
+  .picker .opt.selected { background: rgba(103,58,183,.16); }  /* One shade deeper than hover, declared later so it wins */
   .picker .opt i { color: #673ab7; }
   .picker .actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }
   .picker .actions button { padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid #dee2e6; }
@@ -99,7 +107,7 @@
   .picker .save:hover { background: #a36dff; }
   .picker .save:disabled { opacity: .5; cursor: default; }
 
-  /* ===== 既有 LLM 配置弹窗(语境 mock,用于检验提示条能否压在它之上) ===== */
+  /* ===== Existing LLM config modal (context mock, used to check toast layering) ===== */
   .cfg-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
   .cfg { background: #fff; border-radius: 8px; width: calc(100% - 32px); max-width: 400px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.1); }
   .cfg h2 { font-size: 16px; margin: 0 0 14px; color: #333; }
@@ -109,7 +117,7 @@
   .cfg .acts button { padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid #dee2e6; }
   .cfg .acts .save { background: #ba92ff; border-color: #ba92ff; color: #fff; }
 
-  /* ===== 演示 harness(独立悬浮层,非设计) ===== */
+  /* ===== Demo harness (separate floating layer, not design) ===== */
   [data-demo-harness] {
     position: fixed; left: 0; right: 0; bottom: 16px; margin: 0 auto; width: max-content;
     max-width: calc(100vw - 24px); background: #23212e; color: #cfc9e0; border-radius: 999px;
@@ -137,13 +145,13 @@
 
     <div class="content-mock">
       <h2>Quick Links</h2>
-      <p class="sub">语境 mock,非评判对象</p>
+      <p class="sub">context mock, not the subject being judged</p>
       <div class="card-mock"><div class="t">Deep Security</div><div class="mock-line w80"></div><div class="mock-line w60"></div></div>
       <div class="card-mock"><div class="t">DeepLearning</div><div class="mock-line w60"></div><div class="mock-line w40"></div></div>
       <div class="card-mock"><div class="t">Research</div><div class="mock-line w80"></div><div class="mock-line w40"></div></div>
     </div>
 
-    <!-- 既有配置弹窗(用于检验层级) -->
+    <!-- Existing config modal, used to check layering -->
     <div class="cfg-overlay" id="cfg" style="display:none">
       <div class="cfg">
         <h2>LLM Provider Configuration</h2>
@@ -154,7 +162,7 @@
       </div>
     </div>
 
-    <!-- 分类选择框(取代 prompt()) -->
+    <!-- Category picker, replacing prompt() -->
     <div class="picker-overlay" id="picker" style="display:none">
       <div class="picker">
         <h3>Save to Quick Links</h3>
@@ -170,27 +178,27 @@
       </div>
     </div>
 
-    <!-- 提示条层 -->
+    <!-- Toast layer -->
     <div class="toast-layer" id="toasts"></div>
   </div>
 </div>
 
-<!-- 演示 harness:非设计的一部分,勿实现 -->
+<!-- Demo harness: not part of the design, do not implement -->
 <div data-demo-harness>
-  <span class="lbl">演示·提示</span>
-  <button class="hbtn" onclick="toast('success','Summary saved to Google Drive: Technology &gt; AI Research')">成功</button>
-  <button class="hbtn" onclick="toast('error','Failed to send file: network request timed out after 15 seconds')">错误</button>
-  <button class="hbtn" onclick="toast('info','Please navigate to the original webpage to regenerate the summary')">普通</button>
-  <button class="hbtn" onclick="toast('error','Error changing storage location: The user aborted a request because the selected folder no longer exists in Google Drive and could not be recreated automatically')">超长错误</button>
-  <button class="hbtn" onclick="burst()">连发 3 条</button>
+  <span class="lbl">demo · toasts</span>
+  <button class="hbtn" onclick="toast('success','Summary saved to Google Drive: Technology &gt; AI Research')">success</button>
+  <button class="hbtn" onclick="toast('error','Failed to send file: network request timed out after 15 seconds')">error</button>
+  <button class="hbtn" onclick="toast('info','Please navigate to the original webpage to regenerate the summary')">info</button>
+  <button class="hbtn" onclick="toast('error','Error changing storage location: The user aborted a request because the selected folder no longer exists in Google Drive and could not be recreated automatically')">long error</button>
+  <button class="hbtn" onclick="burst()">burst 3</button>
   <div class="sep"></div>
-  <span class="lbl">演示·选择框</span>
-  <button class="hbtn" onclick="openPicker()">分类选择</button>
+  <span class="lbl">demo · picker</span>
+  <button class="hbtn" onclick="openPicker()">category picker</button>
   <div class="sep"></div>
-  <span class="lbl">演示·配置弹窗</span>
-  <button class="hbtn" id="cfgBtn" onclick="toggleCfg()">打开</button>
+  <span class="lbl">demo · config modal</span>
+  <button class="hbtn" id="cfgBtn" onclick="toggleCfg()">open</button>
   <div class="sep"></div>
-  <span class="lbl">演示·宽度</span>
+  <span class="lbl">demo · width</span>
   <button class="hbtn" onclick="setW(360,this)">360</button>
   <button class="hbtn on" onclick="setW(420,this)">420</button>
   <button class="hbtn" onclick="setW(480,this)">480</button>
@@ -209,12 +217,12 @@ function toast(kind, msg) {
   const layer = document.getElementById('toasts');
   const el = document.createElement('div');
   el.className = 'toast ' + kind;
-  // 错误常驻(必须被读到并手动关闭);成功/普通 4 秒自动消失
+  // Errors persist (they must be read and dismissed); success/info clear after 4s
   const persistent = kind === 'error';
   el.innerHTML = `<span class="ico">${ICONS[kind]}</span><span class="msg">${msg}</span>` +
     (persistent ? `<button class="close" title="Dismiss">${CLOSE}</button>` : `<div class="timer"></div>`);
   layer.appendChild(el);
-  // 超过可见上限时,最旧的先退场
+  // Once the visible cap is reached, the oldest leaves first
   while (layer.children.length > MAX_VISIBLE) layer.firstElementChild.remove();
   if (persistent) el.querySelector('.close').onclick = () => el.remove();
   else setTimeout(() => el.remove(), 4000);
@@ -226,7 +234,7 @@ function burst() {
   setTimeout(() => toast('error', 'Failed to copy to clipboard'), 440);
 }
 
-/* 分类选择框 */
+/* Category picker */
 const CATEGORIES = [
   { name: 'Deep Security', count: 8 },
   { name: 'DeepLearning', count: 3 },
@@ -263,7 +271,7 @@ function toggleCfg() {
   const open = cfg.style.display === 'none';
   cfg.style.display = open ? 'flex' : 'none';
   const b = document.getElementById('cfgBtn');
-  b.textContent = open ? '关闭' : '打开';
+  b.textContent = open ? 'close' : 'open';
   b.classList.toggle('on', open);
   if (open) toast('error', 'There was a problem saving your API keys. Please try again.');
 }
@@ -274,7 +282,7 @@ function setW(w, btn) {
   btn.classList.add('on');
 }
 
-// 首屏给一条,免得页面空着看不出形态
+// Show one on load so the page is not empty
 toast('success', 'Summary saved to Google Drive: Technology &gt; AI Research');
 </script>
 </body>

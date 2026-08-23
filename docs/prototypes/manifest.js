@@ -1,4 +1,5 @@
-// 原型注册表 — 画廊壳 (index.html) 读取。每生成/删除一个原型,同步增删条目。
+// Prototype registry, read by the gallery shell (index.html). Add or remove an
+// entry whenever a prototype is created or deleted.
 window.PROTOTYPES = [
   {
     module: 'llm-model-selection',
@@ -11,7 +12,7 @@ window.PROTOTYPES = [
     module: 'notifications',
     type: 'ui',
     id: 'feedback-layer',
-    name: '侧边栏反馈层 — 提示条 + 分类选择',
+    name: 'Side panel feedback layer — toasts + category picker',
     path: 'notifications/prototype-feedback-layer.html'
   }
 ];

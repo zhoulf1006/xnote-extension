@@ -2,37 +2,37 @@
 
 ## 2026-08-23
 
-### 阶段一 · 逐句核真(本轮触碰的声明面)
+### Stage 1 — statement-by-statement check (declaration surfaces touched this round)
 
-| 核对 | 对照 | 结论 |
+| Check | Against | Conclusion |
 |---|---|---|
-| spec ↔ 实现 | 失败模式 23 条逐条走查 | 一致;实现期偏离(Vision 行按 supportsVision 渲染、15s 超时、OpenAI 过滤词表、supportsSpeech 删除)已回写 spec |
-| spec 失败模式 ↔ 测试/缺口 | tests/*.test.js + 文件头缺口声明 | 逻辑侧 22 用例覆盖;UI 侧缺口逐条声明于测试文件头(见 review-tests) |
-| spec ↔ features | 同 slug 两篇 | features 为 spec 用户可见层蒸馏,无互相矛盾、无 features 独有行为 |
-| ADR ↔ spec/features | — | 按项目能力声明,ADR 未启用,该项跳过 |
-| CONTEXT ↔ 全体 | — | 按项目能力声明,CONTEXT.md 未启用,该项跳过 |
-| 原型 ↔ 实现 | docs/prototypes/llm-model-selection | Vision 行条件渲染已同步进原型(sync 而非标失效);其余界面点一致(外点关闭已补实现) |
-| CLAUDE.md(同轮改写)| 当前代码 | 「无自动化测试」已成谎 → 已改写为 Vitest + 手测双轨;LLM 小节补模型选择一行 |
+| spec ↔ implementation | walked all 23 failure-mode items | consistent; implementation-time deviations (Vision row rendered per supportsVision, the 15s timeout, the OpenAI filter word list, removal of supportsSpeech) written back into the spec |
+| spec failure modes ↔ tests/gaps | tests/*.test.js plus the gap declarations in the file headers | logic side covered by 22 cases; UI-side gaps declared item by item in the test header (see review-tests) |
+| spec ↔ features | the two documents with the same slug | features is a distillation of the spec's user-visible layer; no contradictions, no behaviour present in one and absent from the other |
+| ADR ↔ spec/features | — | per the project capability declaration, ADRs are not enabled; item skipped |
+| CONTEXT ↔ everything | — | per the project capability declaration, CONTEXT.md is not enabled; item skipped |
+| prototype ↔ implementation | docs/prototypes/llm-model-selection | the conditional Vision row was synced into the prototype (synced rather than marked stale); all other UI points match (outside-click close added to the implementation) |
+| CLAUDE.md (rewritten this round) | current code | "no automated test suite" had become false → rewritten as Vitest plus manual testing; a line about model selection added to the LLM section |
 
-### 阶段二 · 关系对读(对照端在 diff、陈述端不在)
+### Stage 2 — relationship reading (the other end is in the diff, the statement is not)
 
-| 关系 | 核对 | 结论 |
+| Relationship | Check | Conclusion |
 |---|---|---|
-| 文件 ↔ 索引行 | docs/specs/README.md、docs/features/README.md | 两个索引均含本功能行,一句话与正文一致 |
-| 事实 ↔ 别处陈述 | 「模型固定/可选」相关措辞全库检索(docs/、README.md、src 文案) | root README 无模型枚举句;docs/intro.md 未陈述模型固定性,无需改 |
-| 规则 ↔ 门禁 | .github 不存在 | 本仓库无 CI 门禁;测试仅本地跑——「该不该建门禁」作为发现提出(见下) |
-| 规则 ↔ 模板复述 | — | 本轮未改带模板复述的规则 |
+| file ↔ its index row | docs/specs/README.md, docs/features/README.md | both indexes carry this feature's row and the one-liners match the documents |
+| a fact ↔ its statements elsewhere | repo-wide search for wording about models being fixed vs selectable (docs/, README.md, src copy) | the root README enumerates no models; docs/intro.md makes no claim about model fixity; no change needed |
+| rule ↔ the gate that guards it | .github does not exist | this repository has no CI gate; tests run locally only — "should a gate exist" raised as a finding below |
+| rule ↔ templates restating it | — | no rule with a restating template was touched this round |
 
-### 阶段三 · 事件核销(两端都不在 diff)
+### Stage 3 — event reconciliation (neither end is in the diff)
 
-| 事件 | 波及 | 结论 |
+| Event | Reach | Conclusion |
 |---|---|---|
-| 引入自动化测试基建(成员数 0→1 的"验证手段"维度) | 陈述测试方式的文档 | CLAUDE.md 命中并已改(见阶段一);root README 无相关句 |
-| 每 provider 模型从 1 个变为动态列表 | 枚举模型名的措辞 | 全库检索 gpt-4o/deepseek-chat/gemini-2.0-flash 于声明面:仅 spec/features 以「兜底默认」身份提及,定性正确 |
-| `Pending:` 注记 | spec | 无 Pending 注记 |
-| 本轮新拍通则 | — | 「滚动容器内下拉走文档流」已落 spec UI 结论(本项目声明面内的正本);无其他通则 |
+| automated test infrastructure introduced (the "verification means" dimension went 0 → 1) | documents stating how testing is done | CLAUDE.md hit and already fixed (see stage 1); the root README has no such statement |
+| each provider went from one model to a dynamic list | wording that enumerates model names | repo-wide search for gpt-4o / deepseek-chat / gemini-2.0-flash across declaration surfaces: only spec and features mention them, and only as the fallback default, which is the correct characterisation |
+| `Pending:` notes | spec | none present |
+| new general rules decided this round | — | "a dropdown inside a scroll container expands in the document flow" is recorded in the spec's UI conclusions (the authoritative place within this project's declaration surfaces); no other general rules |
 
-### 发现(修不了当场修的,定归宿)
+### Findings (fixed on the spot where possible, otherwise given a destination)
 
-1. **docs/intro.md 陈述「Azure OpenAI」「Azure Speech Service」**——本轮之前已是过期陈述(非本轮造成),影响面:对外发布的介绍页误导用户。建议:另开文档清理任务(与 `src/api/openai.js` 死代码清理同批)。归宿待用户定。
-2. **仓库无 CI 门禁**——现有 22 个单测仅本地跑,PR 无检查。建议:建 GitHub Actions 跑 `pnpm test` + `pnpm run build` 并设为必需检查(见 github-ops §8)。归宿待用户定。
+1. **docs/intro.md states "Azure OpenAI" and "Azure Speech Service"** — already stale before this round (not caused by it). Impact: misleads users on a publicly published introduction page. Suggestion: a separate documentation cleanup task, batched with the `src/api/openai.js` dead-code cleanup. Destination pending a user decision.
+2. **The repository has no CI gate** — the 22 unit tests only ever run locally, so pull requests are unchecked. Suggestion: a GitHub Actions workflow running `pnpm test` and `pnpm run build`, set as a required check (see github-ops section 8). Destination pending a user decision.

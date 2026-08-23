@@ -1,20 +1,20 @@
-# 应用内提示与确认
+# In-app messages and confirmations
 
-## 概述
+## Overview
 
-侧边栏里操作成功、失败、需要确认时,用户此前经常什么都看不到——浏览器在扩展侧边栏中屏蔽原生弹窗,报错和确认框都不会出现,删除类按钮点了像没反应。现在所有反馈都由应用自己渲染:提示条、确认对话框、分类选择框。
+Success, failure and confirmation prompts used to be invisible in the side panel: the browser suppresses native dialogs there, so errors never appeared and destructive buttons looked like they did nothing. All feedback is now rendered by the app itself — toasts, a confirmation dialog, and a category picker.
 
-## 能力
+## Capabilities
 
-- 操作结果以提示条形式出现在面板底部,分成功(绿)、错误(红)、普通(蓝)三种。
-- 错误提示常驻,需手动点 × 关闭;成功与普通提示数秒后自动消失。
-- 同时最多显示 3 条,再来新的时最早的一条先消失。
-- 提示条浮在内容之上,不挤动页面;配置弹窗打开时,弹窗内的报错依然可见。
-- 删除、断开连接、清空历史、更改存储位置等操作会弹出确认对话框,确认后才执行,取消则不做任何改动。
-- 通过右键菜单把网页存入 Quick Links 时,以列表选择分类(显示每个分类下的链接数),不再需要输入序号。
+- Operation results appear as toasts at the bottom of the panel, in three severities: success (green), error (red), and informational (blue).
+- Error toasts stay until dismissed with their close button; success and informational toasts disappear after a few seconds.
+- At most three toasts are shown at once; when a new one arrives the oldest leaves.
+- Toasts float above the content instead of pushing it down, and remain readable while the LLM Config dialog is open, so errors raised inside that dialog are still seen.
+- Deleting, disconnecting, clearing history, and changing the storage location all ask for confirmation first; cancelling changes nothing.
+- Saving a page into Quick Links from the right-click menu offers a list of categories with the number of links in each, instead of asking for a typed number.
 
-## 边界与不做
+## Boundaries and non-goals
 
-- 提示条不保留历史:自动消失或手动关闭后无法再次查看,详细信息同时写入开发者控制台。
-- 同一条消息重复触发会重复显示,不做合并计数。
-- 提示条不提供撤销操作;确认对话框是执行前的唯一拦截点。
+- Toasts keep no history: once dismissed or expired they cannot be recalled, though the full detail is also written to the developer console.
+- Repeating the same message shows it again; identical messages are not merged or counted.
+- Toasts offer no undo — the confirmation dialog is the only point where an action can be stopped.

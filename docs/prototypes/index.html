@@ -1,6 +1,8 @@
 <!doctype html>
-<!-- 原型画廊壳(由 prototype skill 的模板复制而来,不手改;要改壳改 skill 模板后重新复制)。
-     依赖同目录 manifest.js:window.PROTOTYPES = [{module,type,id,name,path,question,run?}] -->
+<!-- Prototype gallery shell (copied from the prototype skill's template; edit the
+     template and re-copy rather than editing this file).
+     Reads manifest.js in the same directory:
+     window.PROTOTYPES = [{module,type,id,name,path,question,run?}] -->
 <html lang="zh-CN">
 <head>
 <meta charset="utf-8">
@@ -18,7 +20,8 @@
   *{box-sizing:border-box;margin:0;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif}
   body{display:flex;height:100vh;overflow:hidden;background:var(--bg);color:var(--text);font-size:13px}
 
-  /* 侧栏 = Figma 式深色工具面板:固定配色不随系统主题,与被评判的原型内容(app 风格)强区分 */
+  /* Sidebar = Figma-style dark tool panel: fixed colours regardless of system theme,
+     so it stays clearly distinct from the prototype content being judged */
   .side{width:240px;flex:none;background:#2c2c2e;color:#e8e8e8;border-right:1px solid #1d1d1f;
     display:flex;flex-direction:column;transition:margin .18s}
   body.fold .side{margin-left:-240px}
@@ -46,11 +49,11 @@
 </head>
 <body>
   <div class="side">
-    <div class="s-h"><b>Prototypes</b><button class="fold-btn" onclick="fold(true)" title="收起(S)">⟨⟨</button></div>
+    <div class="s-h"><b>Prototypes</b><button class="fold-btn" onclick="fold(true)" title="collapse(S)">⟨⟨</button></div>
     <div class="list" id="list"></div>
   </div>
-  <button class="unfold" onclick="fold(false)" title="展开(S)">☰ Prototypes</button>
-  <div class="stage" id="stage"><div class="empty">从左侧选择一个原型</div></div>
+  <button class="unfold" onclick="fold(false)" title="expand(S)">☰ Prototypes</button>
+  <div class="stage" id="stage"><div class="empty">Select a prototype on the left</div></div>
 
 <script src="manifest.js"></script>
 <script>
@@ -58,7 +61,7 @@
   const list = document.getElementById('list');
   const stage = document.getElementById('stage');
 
-  // 侧栏:按 module 分组
+  // Sidebar: grouped by module
   const groups = {};
   P.forEach(p => (groups[p.module] ??= []).push(p));
   for (const [mod, items] of Object.entries(groups)) {
@@ -78,8 +81,9 @@
   function show(k){
     const p = find(k);
     document.querySelectorAll('.item').forEach(e => e.classList.toggle('on', e.dataset.key === k));
-    if (!p) { stage.innerHTML = '<div class="empty">从左侧选择一个原型</div>'; return; }
-    // 一切条目统一 iframe:UI 是自包含 HTML,Logic 也是自渲染页(问题/图/命令都在页内)
+    if (!p) { stage.innerHTML = '<div class="empty">Select a prototype on the left</div>'; return; }
+    // Every entry is shown in an iframe: UI prototypes are self-contained HTML, and
+    // logic prototypes render themselves (question, diagram and commands all in-page)
     stage.innerHTML = `<iframe src="${p.path}"></iframe>`;
   }
 
@@ -100,7 +104,8 @@
     location.hash = keys[n]; e.preventDefault();
   });
 
-  // 接收 iframe 内原型的跳转请求(file:// 下子页与壳异源,不能直接改父 hash,走 postMessage)
+  // Handle navigation requests from a prototype inside the iframe: under file:// the
+  // child and the shell are cross-origin, so the hash is changed via postMessage
   addEventListener('message', (e) => {
     const t = e.data && e.data.type === 'proto-nav' && e.data.target;
     if (t && find(t)) location.hash = t;
