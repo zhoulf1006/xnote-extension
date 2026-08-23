@@ -854,11 +854,6 @@ onMounted(async () => {
       await secureStorageService.migrateToEncrypted();
     }
     
-    // Add a small delay to ensure Chrome APIs are fully available
-    if (storageStatus.isExtensionURL) {
-      await new Promise(resolve => setTimeout(resolve, 200));
-    }
-    
     // Check storage status to make sure we're using the right storage
     const status = await checkStorage();
     console.log('Storage status check completed:', status);
