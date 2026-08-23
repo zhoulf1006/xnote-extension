@@ -128,6 +128,27 @@ export function buildModelsRequest(providerKey, { apiKey, baseURL, pageToken } =
   };
 }
 
+// Vision capability by name heuristic — the list APIs expose no capability
+// metadata. Deliberately loose; manual model-ID entry is the escape hatch,
+// and a wrong pick surfaces as a provider error at request time.
+const VISION_CAPABLE = {
+  deepseek: id => /vision|vl/i.test(id),
+  openai: id => /^(gpt-4o|gpt-4\.1|gpt-4-turbo|gpt-5|chatgpt-|o[1345])/i.test(id)
+};
+
+/**
+ * Filter a model list down to vision-capable models for a provider.
+ * Providers without a known heuristic (gemini: chat models are multimodal;
+ * customized: unknown endpoint) pass through unchanged.
+ * @param {string} providerKey
+ * @param {string[]} ids
+ * @returns {string[]}
+ */
+export function filterVisionCapable(providerKey, ids) {
+  const test = VISION_CAPABLE[providerKey];
+  return test ? ids.filter(test) : ids;
+}
+
 export function parseModelsResponse(providerKey, json) {
   if (providerKey === 'gemini') {
     if (!Array.isArray(json?.models)) {

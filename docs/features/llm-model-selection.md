@@ -6,8 +6,8 @@
 
 ## 能力
 
-- LLM Config 弹窗中,OpenAI/DeepSeek/Gemini 各有 Chat model 选择框;支持图像分析的 provider(OpenAI、Gemini)另有 Vision model 选择框。
-- 打开弹窗时,若该 provider 已配置 API key,模型列表自动从官方接口拉取;Chat model 行右侧的刷新按钮可手动重拉。
+- LLM Config 弹窗中,OpenAI/DeepSeek/Gemini 各有 Chat model 选择框;支持图像分析的 provider 另有 Vision model 选择框,其候选只列具备视觉能力的模型(手输任意 ID 不受此限)。
+- 打开弹窗时,若该 provider 已配置 API key,模型列表自动从官方接口拉取;Chat model 行右侧的刷新按钮可手动重拉——刚输入、尚未保存的 key 也可直接用它拉取。
 - 拉取进行中选择框与刷新按钮暂不可用,并显示加载提示。
 - 每个列表末尾的「Enter custom model ID…」可手输任意模型 ID(留空或纯空白无效)。
 - Vision 默认「Same as chat model」;未单独选择时,图像分析使用 Chat 所选模型。
