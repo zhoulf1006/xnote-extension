@@ -109,6 +109,7 @@
 <script setup>
 import { ref, computed, nextTick, onMounted } from 'vue'
 import { confirmAction } from '@/sidepanel/composables/useConfirm'
+import { notify } from '@/sidepanel/composables/useToast'
 import chatHistory from '@/stores/chatHistory'
 
 const props = defineProps({
@@ -173,7 +174,7 @@ const loadChat = async (chatId) => {
     emit('close')
   } catch (error) {
     console.error('Error loading chat:', error)
-    alert('Failed to load chat')
+    notify.error('Failed to load chat')
   }
 }
 
@@ -227,7 +228,7 @@ const confirmDelete = async (chat) => {
       }
     } catch (error) {
       console.error('Error deleting chat:', error)
-      alert('Failed to delete chat')
+      notify.error('Failed to delete chat')
     }
   }
 }
@@ -242,7 +243,7 @@ const clearAll = async () => {
       emit('chat-loaded', null)
     } catch (error) {
       console.error('Error clearing chats:', error)
-      alert('Failed to clear chats')
+      notify.error('Failed to clear chats')
     }
   }
 }

@@ -433,6 +433,9 @@
       </div>
     </div>
 
+    <CategoryPickerDialog />
+    <ToastLayer />
+
     <ConfirmDialog
       :show="!!confirmPending"
       :message="confirmPending?.message || ''"
@@ -476,6 +479,9 @@ import ModelSelect from './components/Common/ModelSelect.vue';
 import FolderBrowser from './components/FolderBrowser/index.vue';
 import { modelCatalogService, modelSelectionStore } from '@/api/modelConfigService';
 import ConfirmDialog from './components/Common/ConfirmDialog.vue';
+import ToastLayer from './components/Common/ToastLayer.vue';
+import CategoryPickerDialog from './components/Common/CategoryPickerDialog.vue';
+import { notify } from './composables/useToast';
 import { confirmAction, useConfirmHost } from './composables/useConfirm';
 import { filterVisionCapable } from '@/api/modelCatalog';
 
@@ -748,7 +754,7 @@ const onFolderSelected = async (folder) => {
     }
   } catch (error) {
     console.error('Error validating folder:', error);
-    alert('Failed to validate the selected folder. Please try again.');
+    notify.error('Failed to validate the selected folder. Please try again.');
   }
 };
 
@@ -787,13 +793,13 @@ const applyLocationChanges = async () => {
       selectedFolder.value = null;
       // Update location mode based on new state
       locationMode.value = googleDriveStore.useCustomLocation ? 'custom' : 'default';
-      alert('Storage location changed successfully!\n\nYou are now working in the new location.');
+      notify.success('Storage location changed. You are now working in the new location.');
     } else {
-      alert('Failed to change storage location. Please try again.');
+      notify.error('Failed to change storage location. Please try again.');
     }
   } catch (error) {
     console.error('Error applying location changes:', error);
-    alert('Error changing storage location: ' + error.message);
+    notify.error('Error changing storage location: ' + error.message);
   }
 };
 
@@ -866,7 +872,7 @@ onMounted(async () => {
     }
   } catch (error) {
     console.error('❌ Error initializing storage:', error);
-    alert('There was a problem initializing the storage system. Some features may not work correctly.');
+    notify.error('There was a problem initializing the storage system. Some features may not work correctly.');
   }
 });
 
@@ -877,11 +883,11 @@ const connectGoogleDrive = async () => {
     if (success) {
       console.log('Successfully connected to Google Drive');
     } else {
-      alert('Failed to connect to Google Drive. Please try again.');
+      notify.error('Failed to connect to Google Drive. Please try again.');
     }
   } catch (error) {
     console.error('Error connecting to Google Drive:', error);
-    alert('Error connecting to Google Drive: ' + error.message);
+    notify.error('Error connecting to Google Drive: ' + error.message);
   }
 };
 
@@ -892,7 +898,7 @@ const disconnectGoogleDrive = async () => {
       console.log('Disconnected from Google Drive');
     } catch (error) {
       console.error('Error disconnecting from Google Drive:', error);
-      alert('Error disconnecting from Google Drive: ' + error.message);
+      notify.error('Error disconnecting from Google Drive: ' + error.message);
     }
   }
 };
@@ -903,11 +909,11 @@ const syncNow = async () => {
     if (success) {
       console.log('Sync completed successfully');
     } else {
-      alert('Sync failed. Please check your connection and try again.');
+      notify.error('Sync failed. Please check your connection and try again.');
     }
   } catch (error) {
     console.error('Error syncing with Google Drive:', error);
-    alert('Error syncing with Google Drive: ' + error.message);
+    notify.error('Error syncing with Google Drive: ' + error.message);
   }
 };
 
@@ -924,11 +930,11 @@ const openGoogleDriveFolder = async () => {
       }
     } else {
       console.warn('Could not get Google Drive folder URL');
-      alert('Could not open Google Drive folder. Please make sure you are connected.');
+      notify.error('Could not open Google Drive folder. Please make sure you are connected.');
     }
   } catch (error) {
     console.error('Error opening Google Drive folder:', error);
-    alert('Error opening Google Drive folder: ' + error.message);
+    notify.error('Error opening Google Drive folder: ' + error.message);
   }
 };
 
@@ -1080,9 +1086,9 @@ const saveConfig = async () => {
     
     // Show more specific error message in development mode
     if (window.location.hostname === 'localhost') {
-      alert('There was a problem saving your API keys, but you can continue using the app in development mode with mock responses.');
+      notify.error('There was a problem saving your API keys, but you can continue using the app in development mode with mock responses.');
     } else {
-      alert('There was a problem saving your API keys. Please try again.');
+      notify.error('There was a problem saving your API keys. Please try again.');
     }
   }
 };

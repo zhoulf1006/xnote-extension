@@ -82,6 +82,7 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, computed } from 'vue';
+import { notify } from '@/sidepanel/composables/useToast';
 import Markdown from 'vue3-markdown-it';
 import { createSummaryPrompt, streamSummary } from './summarizer';
 import useNavigationStore from '@/stores/navigation';
@@ -183,7 +184,7 @@ const regenerateSummary = async () => {
           }
         });
       } else {
-        alert('Please navigate to the original webpage to regenerate the summary');
+        notify.info('Please navigate to the original webpage to regenerate the summary');
       }
     });
   }
@@ -404,7 +405,7 @@ const saveToGoogleDrive = async () => {
   // Check if connected to Google Drive
   if (!googleDrive.isConnected.value) {
     console.warn('Not connected to Google Drive');
-    alert('Please connect to Google Drive first.');
+    notify.info('Please connect to Google Drive first.');
     return;
   }
 
@@ -434,7 +435,7 @@ const saveToGoogleDrive = async () => {
     showCategoryDialog.value = true;
   } catch (error) {
     console.error('Error preparing save:', error);
-    alert('Failed to prepare save: ' + error.message);
+    notify.error('Failed to prepare save: ' + error.message);
   }
 };
 
@@ -473,10 +474,10 @@ const handleCategoryConfirm = async (category) => {
     await mappingsStore.saveUploadStatus(currentPage.value.url, !!existingFileId);
 
     // Show success message (you can replace this with a better notification system)
-    alert(`Summary saved to Google Drive: ${category.mainCategory} > ${category.subCategory}`);
+    notify.success(`Summary saved to Google Drive: ${category.mainCategory} > ${category.subCategory}`);
   } catch (error) {
     console.error('Failed to save to Google Drive:', error);
-    alert('Failed to save to Google Drive: ' + error.message);
+    notify.error('Failed to save to Google Drive: ' + error.message);
   }
 };
 
