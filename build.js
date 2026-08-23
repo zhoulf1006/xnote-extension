@@ -52,6 +52,9 @@ async function buildExtension() {
     console.log('   ✓ Moved index.html to sidepanel.html')
   }
   
+  console.log('Marking dist as a dev build (store packaging reverses this)...')
+  await import('./scripts/apply-dev-manifest.js')
+
   console.log('Extension build complete!')
   console.log('Files in dist:')
   const files = await fs.readdir('dist')

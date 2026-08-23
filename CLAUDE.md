@@ -50,6 +50,7 @@ make dev-pack     # Build + zip with the dev manifest (keeps the `key` field)
 
 ### Build System
 - `build.js` runs Vite then assembles `dist/` into extension layout: copies `manifest.json`, `background.js`, content scripts, icons, `public/data`, and moves the built HTML to `dist/sidepanel.html`.
+- `dist/` is always dev-marked — name "XNote Extension (Dev)" and orange icons (`scripts/apply-dev-manifest.js`) — so the unpacked build is distinguishable from the store version; `prepare-store-manifest.js` reverses this (plus key removal and OAuth client swap) inside `make pack`.
 - Production builds blank all `VITE_*` env vars (see `vite.config.js` `define`) so keys are never inlined into shipped code.
 
 ## Invariants and Gotchas
