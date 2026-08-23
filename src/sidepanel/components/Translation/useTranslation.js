@@ -56,7 +56,7 @@ Unable to connect to the AI service. Please check your internet connection and t
 
 No LLM provider is configured. Please:
 1. Click the **⚙️ LLM Config** button at the bottom of the sidebar
-2. Select a provider (OpenAI, Gemini, or DeepSeek)
+2. Select a provider
 3. Enter your API key
 4. Click **Save** to complete setup`;
     }

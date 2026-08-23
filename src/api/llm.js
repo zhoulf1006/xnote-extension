@@ -120,7 +120,7 @@ export class LLMService {
 
     // Check if current provider supports vision
     if (!this.supportsVision()) {
-      throw new Error(`The ${this.config.name} provider does not support image analysis. Please switch to OpenAI or Gemini to use this feature.`);
+      throw new Error(`The ${this.config.name} provider does not support image analysis. Please switch to a provider that supports image analysis.`);
     }
 
     // Strip data URL prefix if present

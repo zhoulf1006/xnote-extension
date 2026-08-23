@@ -63,6 +63,10 @@
 
 <script setup>
 import { ref, computed, watch, nextTick } from 'vue';
+import { useLLMConfigStore } from '@/stores/llmConfig';
+import { llmProviders } from '@/config/llmProviders';
+
+const llmConfigStore = useLLMConfigStore();
 
 // Props
 const props = defineProps({
@@ -150,14 +154,7 @@ ${displayText.value}
 }
 
 function getCurrentProvider() {
-  // Get from store if available
-  const provider = localStorage.getItem('xnote-llm-provider') || 'unknown';
-  const providers = {
-    'openai': 'OpenAI',
-    'deepseek': 'DeepSeek',
-    'gemini': 'Gemini 2.0 Flash'
-  };
-  return providers[provider] || provider;
+  return llmProviders[llmConfigStore.selectedProvider]?.name || llmConfigStore.selectedProvider;
 }
 </script>
 
