@@ -316,19 +316,15 @@ class LinksService {
   }
 
   /**
-   * Delete a category (only if it has no links)
+   * Delete a category along with any links it contains.
+   * The caller is responsible for confirming with the user first.
    */
   async deleteCategory(categoryName) {
     const data = await this.getLinksData()
     const categoryIndex = data.models.findIndex(model => model.name === categoryName)
-    
+
     if (categoryIndex === -1) {
       throw new Error('Category not found')
-    }
-
-    const category = data.models[categoryIndex]
-    if (category.links.length > 0) {
-      throw new Error('Cannot delete category with existing links. Please delete all links first.')
     }
 
     data.models.splice(categoryIndex, 1)

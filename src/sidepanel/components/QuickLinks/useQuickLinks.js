@@ -5,6 +5,7 @@
 
 import { ref, reactive, nextTick, onMounted, computed } from 'vue'
 import quickLinksService from './quickLinksService.js'
+import { confirmAction } from '../../composables/useConfirm.js'
 
 export function useQuickLinks() {
   // Data refs
@@ -141,9 +142,14 @@ export function useQuickLinks() {
   }
 
   const deleteCategory = async (categoryName) => {
-    if (!confirm(`Are you sure you want to delete the category "${categoryName}"?`)) {
-      return
-    }
+    // Deleting a category removes its links too, so name the cost in the prompt
+    const linkCount = quickLinksData.value?.models
+      ?.find(model => model.name === categoryName)?.links?.length || 0
+    const message = linkCount > 0
+      ? `Delete the category "${categoryName}" and the ${linkCount} link${linkCount === 1 ? '' : 's'} inside it?`
+      : `Are you sure you want to delete the category "${categoryName}"?`
+
+    if (!(await confirmAction(message))) return
 
     try {
       await quickLinksService.deleteCategory(categoryName)
@@ -215,9 +221,7 @@ export function useQuickLinks() {
   }
 
   const deleteLink = async (categoryName, linkUrl) => {
-    if (!confirm('Are you sure you want to delete this link?')) {
-      return
-    }
+    if (!(await confirmAction('Are you sure you want to delete this link?'))) return
 
     try {
       await quickLinksService.deleteLink(categoryName, linkUrl)

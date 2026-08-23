@@ -108,6 +108,7 @@
 
 <script setup>
 import { ref, computed, nextTick, onMounted } from 'vue'
+import { confirmAction } from '@/sidepanel/composables/useConfirm'
 import chatHistory from '@/stores/chatHistory'
 
 const props = defineProps({
@@ -218,7 +219,7 @@ const confirmDelete = async (chat) => {
     ? 'This is the active chat. Are you sure you want to delete it?'
     : `Delete "${chat.title}"?`
 
-  if (confirm(message)) {
+  if (await confirmAction(message)) {
     try {
       await chatHistory.deleteChat(chat.id)
       if (chat.isActive) {
@@ -233,15 +234,15 @@ const confirmDelete = async (chat) => {
 
 // Clear all chats
 const clearAll = async () => {
-  if (confirm('This will permanently delete all chat history. Are you sure?')) {
-    if (confirm('This action cannot be undone. Continue?')) {
-      try {
-        await chatHistory.clearAllChats()
-        emit('chat-loaded', null)
-      } catch (error) {
-        console.error('Error clearing chats:', error)
-        alert('Failed to clear chats')
-      }
+  // One dialog carrying both warnings: the old second confirm() existed only
+  // because a native prompt cannot express severity
+  if (await confirmAction('This will permanently delete all chat history. This cannot be undone. Continue?', 'Delete All')) {
+    try {
+      await chatHistory.clearAllChats()
+      emit('chat-loaded', null)
+    } catch (error) {
+      console.error('Error clearing chats:', error)
+      alert('Failed to clear chats')
     }
   }
 }

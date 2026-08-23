@@ -103,10 +103,9 @@
                   <i class="fas fa-xmark"></i>
                 </button>
               </template>
-              <button @click="deleteCategory(model.name)" 
-                      class="btn-icon btn-delete" 
-                      title="Delete category"
-                      :disabled="model.links.length > 0">
+              <button @click="deleteCategory(model.name)"
+                      class="btn-icon btn-delete"
+                      title="Delete category">
                 <i class="fas fa-trash-can"></i>
               </button>
               <button @click="saveCurrentPageToCategory(model.name)" 

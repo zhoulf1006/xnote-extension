@@ -433,6 +433,14 @@
       </div>
     </div>
 
+    <ConfirmDialog
+      :show="!!confirmPending"
+      :message="confirmPending?.message || ''"
+      :confirm-label="confirmPending?.confirmLabel || 'Delete'"
+      @confirm="acceptConfirm"
+      @cancel="cancelConfirm"
+    />
+
     <!-- Folder Browser Modal -->
     <FolderBrowser
       v-if="showFolderBrowser"
@@ -467,9 +475,13 @@ import ApiKeyInput from './components/Common/ApiKeyInput.vue';
 import ModelSelect from './components/Common/ModelSelect.vue';
 import FolderBrowser from './components/FolderBrowser/index.vue';
 import { modelCatalogService, modelSelectionStore } from '@/api/modelConfigService';
+import ConfirmDialog from './components/Common/ConfirmDialog.vue';
+import { confirmAction, useConfirmHost } from './composables/useConfirm';
 import { filterVisionCapable } from '@/api/modelCatalog';
 
 const navigationStore = useNavigationStore();
+// Single app-wide confirmation dialog host (window.confirm is suppressed in side panels)
+const { pending: confirmPending, accept: acceptConfirm, cancel: cancelConfirm } = useConfirmHost();
 const llmConfigStore = useLLMConfigStore();
 const googleDriveStore = useGoogleDriveStore();
 const showConfig = ref(false);
@@ -753,7 +765,7 @@ const applyLocationChanges = async () => {
     '• The new location will start fresh or use existing files if you\'ve used it before\n\n' +
     'Do you want to continue?';
 
-  if (!confirm(confirmMessage)) {
+  if (!(await confirmAction(confirmMessage, 'Continue'))) {
     return;
   }
 
@@ -874,7 +886,7 @@ const connectGoogleDrive = async () => {
 };
 
 const disconnectGoogleDrive = async () => {
-  if (confirm('Are you sure you want to disconnect from Google Drive? This will stop all syncing.')) {
+  if (await confirmAction('Are you sure you want to disconnect from Google Drive? This will stop all syncing.', 'Disconnect')) {
     try {
       await googleDriveStore.disconnect();
       console.log('Disconnected from Google Drive');
