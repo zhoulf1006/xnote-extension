@@ -1,0 +1,340 @@
+<!doctype html>
+<!--
+  原型:LLM Config modal — dynamic model selection(Direction A: inline rows)
+  问题:在既有 LLM Provider Configuration modal 内,按 provider 提供
+       Chat/Vision 两个模型选择行(列表来自各 provider 的 list-models API),
+       loading / 401 / 网络错误(降级缓存)/ 无 key 各状态长什么样?
+       自由文本逃生口与 Customized provider 的 fetch 助手如何呈现?
+  语境外壳:XNote 侧边栏(左侧 48px 导航栏 + 内容区)为简化 mock,仅提供评判语境,非本原型评判对象。
+  演示基建(data-demo-harness,非设计的一部分,勿实现):
+    - 底部悬浮暗色 pill:「演示·拉取状态」(已加载/加载中/401 错误/网络错误·缓存/未配 key)
+      —— 真实判定来源:模型列表拉取的实际结果与 key 配置状态,app 内无此开关;
+    - 「演示·面板宽度」(360/420/480)—— 真实来源:用户拖动侧边栏宽度。
+  图标注:原型内联简化描边图标示意;实现沿用项目 Font Awesome 类
+        (fa-rotate-right / fa-chevron-down / fa-check-circle / fa-exclamation-triangle / fa-flask)。
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Prototype — LLM Config modal: dynamic model selection</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #e9e6f0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .stage { display: flex; justify-content: center; padding: 24px 0 96px; }
+
+  /* ===== 侧边栏外壳(语境 mock) ===== */
+  .panel { width: 420px; height: 640px; background: #f8f9fa; display: flex; box-shadow: 0 4px 24px rgba(0,0,0,.18); position: relative; overflow: hidden; }
+  .rail { width: 48px; background: rgba(103,58,183,.15); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
+  .rail .ric { width: 48px; height: 48px; display: grid; place-items: center; color: rgba(0,0,0,.8); }
+  .rail .ric.active { background: rgba(156,130,202,.85); color: #fff; }
+  .rail .spacer { flex: 1; }
+  .content-mock { flex: 1; background: #fff; padding: 12px; overflow: hidden; }
+  .mock-line { height: 10px; border-radius: 5px; background: #eceef1; margin: 10px 4px; }
+  .mock-line.w60 { width: 60%; } .mock-line.w80 { width: 80%; } .mock-line.w40 { width: 40%; }
+
+  /* ===== Modal(评判对象) ===== */
+  .overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; }
+  .modal { background: #fff; border-radius: 8px; width: calc(100% - 32px); max-width: 400px; max-height: calc(100% - 48px); overflow-y: auto; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+  .modal h2 { font-size: 16px; margin: 0 0 14px; color: #333; }
+
+  .providers { display: flex; flex-direction: column; gap: 8px; }
+  .provider-option { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid #dee2e6; border-radius: 6px; cursor: pointer; font-size: 14px; color: #495057; }
+  .provider-option:hover { background: #f8f9fa; border-color: #adb5bd; }
+  .provider-option.selected { background: rgba(103,58,183,.1); border-color: #673ab7; }
+
+  .section { margin-top: 14px; padding-top: 14px; border-top: 1px solid #ddd; }
+  .section h3 { font-size: 13px; margin: 0 0 8px; color: #333; }
+  .field-label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600; color: #333; margin: 12px 0 5px; }
+  .field-label:first-child { margin-top: 0; }
+  .key-row { display: flex; align-items: center; gap: 8px; }
+  .key-input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; font-size: 13px; font-family: monospace; }
+  .key-ok { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #2e7d32; white-space: nowrap; }
+  .hint { font-size: 11px; color: #666; margin-top: 4px; }
+
+  /* 图标按钮:固定盒 + 居中(第 6 节) */
+  .icon-btn { width: 24px; height: 24px; display: grid; place-items: center; border: none; background: transparent; color: #673ab7; border-radius: 4px; cursor: pointer; padding: 0; }
+  .icon-btn:hover { background: rgba(103,58,183,.12); }
+  .icon-btn:disabled { color: #adb5bd; cursor: default; }
+  .icon-btn:disabled:hover { background: transparent; }
+
+  /* ===== 模型 combobox ===== */
+  .combo { position: relative; }
+  .combo-btn { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; background: #fff; font-size: 13px; font-family: monospace; color: #333; cursor: pointer; text-align: left; }
+  .combo-btn:hover { border-color: #adb5bd; }
+  .combo-btn.open { border-color: #673ab7; box-shadow: 0 0 0 2px rgba(103,58,183,.12); }
+  .combo-btn:disabled { background: #f5f5f5; color: #adb5bd; cursor: default; }
+  .combo-btn .val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .combo-btn .val.placeholder { color: #999; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .combo-btn .chev { flex: none; color: #6c757d; }
+  /* 列表走文档流(向下推开内容),不悬浮——modal 是滚动容器,悬浮层会被裁 */
+  .dd { margin-top: 4px; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; display: flex; flex-direction: column; gap: 2px; padding: 4px; max-height: 180px; overflow-y: auto; }
+  .dd-item { padding: 6px 8px; border-radius: 4px; font-size: 12.5px; font-family: monospace; color: #333; cursor: pointer; display: flex; align-items: center; gap: 6px; }
+  .dd-item .label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .dd-item .label.sysfont { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .dd-item:hover { background: rgba(103,58,183,.07); }
+  .dd-item.selected { background: rgba(103,58,183,.16); }   /* 同族加深;源序在后 → 悬浮时仍胜出 */
+  .dd-item.meta { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #673ab7; font-weight: 500; font-size: 12px; border-top: 1px solid #eee; border-radius: 0 0 4px 4px; margin-top: 2px; position: sticky; bottom: -4px; background: #fff; }
+  .dd-item.meta:hover { background: rgba(103,58,183,.07); }
+  .custom-row { display: flex; gap: 6px; margin-top: 6px; }
+  .custom-row input { flex: 1; min-width: 0; padding: 7px 9px; border: 1px solid #673ab7; border-radius: 4px; font-size: 12.5px; font-family: monospace; }
+  .custom-row button { border: 1px solid #ba92ff; background: transparent; color: #673ab7; border-radius: 4px; font-size: 12px; padding: 0 10px; cursor: pointer; }
+  .custom-row button:hover { background: #ba92ff; color: #fff; }
+
+  /* 状态条 */
+  .state-note { display: flex; align-items: flex-start; gap: 6px; font-size: 11.5px; border-radius: 4px; padding: 6px 8px; margin-top: 6px; line-height: 1.4; }
+  .state-note.err { background: #ffeaea; color: #c62828; }
+  .state-note.warn { background: #fff3cd; color: #8a6d1a; }
+  .state-note.info { background: #f0f8ff; color: #1565c0; }
+  .state-note svg { flex: none; margin-top: 1px; }
+  .spin { animation: rot 1s linear infinite; }
+  @keyframes rot { to { transform: rotate(360deg); } }
+
+  /* Customized provider */
+  .cap-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 12.5px; color: #333; flex-wrap: wrap; }
+  .cap-row label { display: flex; align-items: center; gap: 6px; min-width: 128px; }
+  .cap-row .combo { flex: 1; min-width: 140px; }
+  .fetch-assist { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #ba92ff; background: transparent; color: #673ab7; border-radius: 4px; font-size: 12px; padding: 5px 10px; cursor: pointer; }
+  .fetch-assist:hover { background: #ba92ff; color: #fff; }
+
+  .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
+  .actions button { padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid #dee2e6; }
+  .actions .save { background: #ba92ff; border-color: #ba92ff; color: #fff; }
+  .actions .save:hover { background: #a36dff; }
+  .actions .cancel { background: #fff; color: #495057; }
+
+  /* ===== 演示 harness(独立悬浮层,非设计) ===== */
+  [data-demo-harness] { position: fixed; left: 0; right: 0; bottom: 16px; margin: 0 auto; width: max-content; max-width: calc(100vw - 24px); background: #23212e; color: #cfc9e0; border-radius: 999px; display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.35); z-index: 999; }
+  [data-demo-harness] .grp { display: flex; align-items: center; gap: 6px; }
+  [data-demo-harness] .sep { width: 1px; height: 18px; background: #4a4560; }
+  [data-demo-harness] .hbtn { border: 1px solid #4a4560; background: transparent; color: #cfc9e0; border-radius: 999px; padding: 3px 10px; font-size: 11.5px; cursor: pointer; }
+  [data-demo-harness] .hbtn.on { background: #6e5aa8; border-color: #6e5aa8; color: #fff; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="panel" id="panel">
+    <div class="rail">
+      <div class="ric" title="Chat"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      <div class="ric" title="Capture"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+      <div class="ric" title="Translate"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 8l6 6M4 14l6-6 2-3M2 5h12M7 2h1M22 22l-5-10-5 10M14 18h6"/></svg></div>
+      <div class="ric" title="Summary"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></div>
+      <div class="ric" title="Quick Links"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+      <div class="ric" title="Transfer"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3l4 4-4 4M21 7H7M7 21l-4-4 4-4M3 17h14"/></svg></div>
+      <div class="spacer"></div>
+      <div class="ric active" title="LLM Config"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+    </div>
+    <div class="content-mock">
+      <div class="mock-line w60"></div><div class="mock-line w80"></div><div class="mock-line"></div>
+      <div class="mock-line w40"></div><div class="mock-line w80"></div><div class="mock-line w60"></div>
+    </div>
+
+    <div class="overlay">
+      <div class="modal" id="modal"><!-- JS 渲染 --></div>
+    </div>
+  </div>
+</div>
+
+<!-- 演示 harness:非设计的一部分,勿实现 -->
+<div data-demo-harness>
+  <span style="opacity:.65">演示·拉取状态</span>
+  <div class="grp" id="h-state"></div>
+  <div class="sep"></div>
+  <span style="opacity:.65">演示·面板宽度</span>
+  <div class="grp" id="h-width"></div>
+</div>
+
+<script>
+/* ===== Mock 数据(刻意含最长 ID 与边界情形) ===== */
+const MODELS = {
+  openai: ["gpt-5.2","gpt-5.2-mini","gpt-5.1","gpt-5","gpt-5-mini","gpt-5-nano","gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini","chatgpt-4o-latest","o4","o4-mini","o3","o3-mini","gpt-4o-audio-preview-2024-12-17","gpt-4.1-2025-04-14","gpt-4-turbo","gpt-3.5-turbo"],
+  deepseek: ["deepseek-chat","deepseek-reasoner","deepseek-v4-flash","deepseek-v4-pro"],
+  gemini: ["gemini-3.0-flash","gemini-3.0-pro","gemini-2.5-flash","gemini-2.5-pro","gemini-2.5-flash-lite","gemini-2.5-flash-preview-native-audio-dialog","gemini-2.0-flash","gemini-2.0-flash-thinking-exp-01-21"],
+  customized: ["deepseek-ai/DeepSeek-V3.2","Qwen/Qwen3-235B-A22B-Instruct-2507-GPTQ-Int4","meta-llama/Llama-4-Maverick-17B-128E-Instruct"]
+};
+const PROVIDERS = [
+  { key: "openai",     name: "OpenAI",     hasKey: true,  supportsVision: true  },
+  { key: "deepseek",   name: "DeepSeek",   hasKey: true,  supportsVision: false }, // Vision 行仅对支持视觉的 provider 渲染(实现定稿)
+  { key: "gemini",     name: "Gemini",     hasKey: false, supportsVision: true  },   // 天然演示"未配 key"态
+  { key: "customized", name: "Customized", hasKey: true  }
+];
+const state = {
+  provider: "deepseek",
+  fetch: "loaded",              // loaded | loading | err401 | errnet | nokey(强制覆盖)
+  sel: {                        // 已选模型(vision null = Same as chat)
+    openai:   { chat: "gpt-4o", vision: "gpt-4o" },
+    deepseek: { chat: "deepseek-chat", vision: null },
+    gemini:   { chat: "gemini-2.0-flash", vision: null },
+  },
+  custom: { baseURL: "https://api.example.com/v1",
+            caps: { chat: {on:true, model:"deepseek-ai/DeepSeek-V3.2"},
+                    vision:{on:true, model:""},
+                    speech:{on:false, model:"tts-1"} },
+            fetched: false },
+  openDD: null,                 // 当前展开的 combobox id
+  customInput: null             // 正在自由输入的 combobox id
+};
+
+/* ===== 图标(内联描边示意;实现用项目 FA 类) ===== */
+const I = {
+  refresh: c => `<svg class="${c||''}" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>`,
+  chev: `<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>`,
+  check: `<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>`,
+  ok: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>`,
+  warn: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>`
+};
+
+const fmtState = () => state.fetch === "nokey" ? "nokey"
+  : (!PROVIDERS.find(p=>p.key===state.provider).hasKey ? "nokey" : state.fetch);
+
+/* ===== combobox 渲染 ===== */
+function combo(id, value, placeholder, list, opts={}) {
+  const st = fmtState();
+  const disabled = st==="loading";
+  const isOpen = state.openDD===id, isCustom = state.customInput===id;
+  const valHtml = value ? `<span class="val">${value}</span>`
+                        : `<span class="val placeholder">${placeholder}</span>`;
+  let dd = "";
+  if (isOpen) {
+    const items = list.map(m => {
+      const sel = m===value || (m==="__same__" && !value && opts.sameAsChat);
+      const lbl = m==="__same__" ? "Same as chat model" : m;
+      return `<div class="dd-item ${sel?'selected':''}" data-pick="${id}" data-val="${m}">
+                <span class="label${m==='__same__' ? ' sysfont' : ''}">${lbl}</span>
+                ${sel ? I.check : ''}</div>`;
+    }).join("");
+    dd = `<div class="dd">${items}
+      <div class="dd-item meta" data-custom="${id}">Enter custom model ID…</div></div>`;
+  }
+  const custom = isCustom ? `<div class="custom-row">
+      <input id="ci-${id}" placeholder="model-id" autocomplete="off">
+      <button data-apply="${id}">Use</button><button data-cancel="${id}">✕</button></div>` : "";
+  return `<div class="combo">
+    <button class="combo-btn ${isOpen?'open':''}" data-dd="${id}" ${disabled?'disabled':''}>${valHtml}${I.chev}</button>
+    ${dd}${custom}</div>`;
+}
+
+function modelSection(pkey) {
+  const st = fmtState();
+  const sel = state.sel[pkey];
+  const models = MODELS[pkey];
+  const refreshBtn = `<button class="icon-btn" data-refresh title="Refresh model list" ${st==="loading"||st==="nokey"?'disabled':''}>${I.refresh(st==="loading"?"spin":"")}</button>`;
+  let note = "";
+  if (st==="loading") note = `<div class="state-note info">${I.refresh("spin")}<span>Fetching model list…</span></div>`;
+  if (st==="err401")  note = `<div class="state-note err">${I.warn}<span>Couldn't fetch models — API key was rejected (401). Check the key above, or enter a model ID manually.</span></div>`;
+  if (st==="errnet")  note = `<div class="state-note warn">${I.warn}<span>Couldn't refresh — showing cached list (fetched 2 days ago). Manual entry still works.</span></div>`;
+  if (st==="nokey")   note = `<div class="state-note info">${I.warn}<span>Configure an API key to load the model list. You can still enter a model ID manually.</span></div>`;
+  const listAvailable = st==="loaded" || st==="errnet";
+  const chatList = listAvailable ? models : [];
+  const chatCombo = (st==="nokey" && !state.customInput)
+    ? combo("chat", sel.chat, "Enter model ID manually…", [])
+    : combo("chat", sel.chat, "Select a model…", chatList);
+  const visList = ["__same__", ...chatList];
+  const supportsVision = PROVIDERS.find(p => p.key === pkey)?.supportsVision;
+  const visionRows = supportsVision ? `
+    <div class="field-label"><span>Vision model</span></div>
+    ${combo("vision", sel.vision, "Same as chat model", visList, {sameAsChat:true})}` : "";
+  return `
+    <div class="field-label"><span>Chat model</span>${refreshBtn}</div>
+    ${chatCombo}
+    ${visionRows}
+    ${note}
+    <div class="hint">Default when nothing selected: provider fallback (${({openai:"gpt-4o",deepseek:"deepseek-chat",gemini:"gemini-2.0-flash"})[pkey]})</div>`;
+}
+
+function customizedSection() {
+  const c = state.custom;
+  const list = c.fetched ? MODELS.customized : [];
+  const capRow = (cap, label) => `
+    <div class="cap-row">
+      <label><input type="checkbox" data-cap="${cap}" ${c.caps[cap].on?'checked':''}>${label}</label>
+      ${c.caps[cap].on ? combo("cap-"+cap, c.caps[cap].model, "Model ID…", list) : ""}
+    </div>`;
+  return `
+    <div class="field-label"><span>Base URL Endpoint</span></div>
+    <input class="key-input" style="width:100%" value="${c.baseURL}">
+    <div style="margin:10px 0 4px"><button class="fetch-assist" data-fetch-assist>${I.refresh(c.fetching?"spin":"")}<span>${c.fetched?"Refresh models from endpoint":"Fetch models from endpoint"}</span></button></div>
+    ${c.fetched ? `<div class="hint">3 models loaded from /models — dropdowns below now offer them as suggestions.</div>` : `<div class="hint">Loads /models from the endpoint to offer suggestions; manual entry always works.</div>`}
+    <div class="section"><h3>Capabilities</h3>
+      ${capRow("chat","Chat")}
+      ${capRow("vision","Vision")}
+      ${capRow("speech","Speech (TTS)")}
+    </div>`;
+}
+
+function render() {
+  const p = PROVIDERS.find(x=>x.key===state.provider);
+  const radios = PROVIDERS.map(x => `
+    <div class="provider-option ${x.key===state.provider?'selected':''}" data-prov="${x.key}">
+      <input type="radio" ${x.key===state.provider?'checked':''} tabindex="-1">${x.name}
+    </div>`).join("");
+  const keyRow = p.key==="customized" ? "" : `
+    <div class="section">
+      <div class="field-label"><span>${p.name} API Key</span></div>
+      <div class="key-row">
+        <input class="key-input" type="password" value="${p.hasKey&&fmtState()!=="nokey"?"••••••••••••••••":""}" placeholder="Enter your ${p.name} API key">
+        ${p.hasKey&&fmtState()!=="nokey"?`<span class="key-ok">${I.ok} configured</span>`:""}
+      </div>
+    </div>`;
+  document.getElementById("modal").innerHTML = `
+    <h2>LLM Provider Configuration</h2>
+    <div class="providers">${radios}</div>
+    ${keyRow}
+    <div class="section">
+      ${p.key==="customized" ? customizedSection() : modelSection(p.key)}
+    </div>
+    <div class="actions"><button class="cancel">Cancel</button><button class="save">Save</button></div>`;
+  renderHarness();
+  const ci = document.querySelector("[id^='ci-']"); if (ci) ci.focus();
+}
+
+/* ===== 演示 harness ===== */
+const H_STATES = [["loaded","已加载"],["loading","加载中"],["err401","401 错误"],["errnet","网错·缓存"],["nokey","未配 key"]];
+const H_WIDTHS = [360,420,480];
+function renderHarness() {
+  document.getElementById("h-state").innerHTML = H_STATES.map(([k,l]) =>
+    `<button class="hbtn ${state.fetch===k?'on':''}" data-hstate="${k}">${l}</button>`).join("");
+  document.getElementById("h-width").innerHTML = H_WIDTHS.map(w =>
+    `<button class="hbtn ${document.getElementById("panel").style.width===w+"px"||(!document.getElementById("panel").style.width&&w===420)?'on':''}" data-hwidth="${w}">${w}</button>`).join("");
+}
+
+/* ===== 交互 ===== */
+document.addEventListener("click", e => {
+  const t = e.target;
+  const pick = t.closest("[data-pick]");
+  const hit = sel => t.closest(sel);
+  if (hit("[data-hstate]")) { state.fetch = hit("[data-hstate]").dataset.hstate; state.openDD=null; state.customInput=null; render(); return; }
+  if (hit("[data-hwidth]")) { document.getElementById("panel").style.width = hit("[data-hwidth]").dataset.hwidth+"px"; renderHarness(); return; }
+  if (hit("[data-prov]")) { state.provider = hit("[data-prov]").dataset.prov; state.openDD=null; state.customInput=null; render(); return; }
+  if (hit("[data-dd]")) { const id = hit("[data-dd]").dataset.dd; state.openDD = state.openDD===id?null:id; state.customInput=null; render(); return; }
+  if (pick) {
+    const id = pick.dataset.pick, v = pick.dataset.val;
+    applyPick(id, v==="__same__" ? null : v);
+    state.openDD = null; render(); return;
+  }
+  if (hit("[data-custom]")) { state.customInput = hit("[data-custom]").dataset.custom; state.openDD=null; render(); return; }
+  if (hit("[data-apply]")) {
+    const id = hit("[data-apply]").dataset.apply;
+    const v = document.getElementById("ci-"+id).value.trim();
+    if (v) applyPick(id, v);
+    state.customInput=null; render(); return;
+  }
+  if (hit("[data-cancel]")) { state.customInput=null; render(); return; }
+  if (hit("[data-refresh]")) {   // mock:短暂 loading 后回到 loaded
+    state.fetch="loading"; render();
+    setTimeout(()=>{ state.fetch="loaded"; render(); }, 900); return;
+  }
+  if (hit("[data-fetch-assist]")) {
+    state.custom.fetching = true; render();
+    setTimeout(()=>{ state.custom.fetching=false; state.custom.fetched=true; render(); }, 900); return;
+  }
+  if (hit("[data-cap]")) { const c = hit("[data-cap]").dataset.cap; state.custom.caps[c].on = hit("[data-cap]").checked; render(); return; }
+  if (!hit(".combo")) { if (state.openDD){ state.openDD=null; render(); } }
+});
+function applyPick(id, v) {
+  if (id.startsWith("cap-")) state.custom.caps[id.slice(4)].model = v || "";
+  else state.sel[state.provider][id] = v;
+}
+render();
+</script>
+</body>
+</html>

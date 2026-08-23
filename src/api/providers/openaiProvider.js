@@ -1,3 +1,5 @@
+import { resolveModelFor } from '../modelConfigService';
+
 /**
  * Provider implementation for OpenAI compatible APIs (OpenAI, DeepSeek)
  */
@@ -70,9 +72,7 @@ export class OpenAIProvider {
       }
 
       const defaultOptions = {
-        model: hasImages ?
-          (this.config.visionModel || this.config.defaultModel) :
-          this.config.defaultModel,
+        model: await resolveModelFor(this.config.key, hasImages ? 'vision' : 'chat'),
         stream: true,
         temperature: 0.7,
         max_tokens: hasImages ? 4096 : 2000 // More tokens for image analysis

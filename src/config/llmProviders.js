@@ -1,3 +1,6 @@
+// Provider registry. defaultModel is the last-resort fallback only — the model
+// actually used is resolved at request time from the user's stored selection
+// (see modelConfigService). Model lists come from each provider's list-models API.
 export const llmProviders = {
   openai: {
     name: 'OpenAI',
@@ -5,13 +8,7 @@ export const llmProviders = {
     defaultModel: 'gpt-4o',
     apiKeyEnv: 'VITE_OPENAI_API_KEY',
     clientType: 'openai',
-    supportsVision: true, // Supports image analysis
-    supportsSpeech: true, // Supports TTS
-    models: {
-      chat: 'gpt-4o',
-      vision: 'gpt-4o',
-      speech: 'tts-1'
-    }
+    supportsVision: true
   },
   deepseek: {
     name: 'DeepSeek',
@@ -23,10 +20,10 @@ export const llmProviders = {
   },
   gemini: {
     name: 'Gemini',
-    model: 'gemini-2.0-flash',
+    defaultModel: 'gemini-2.0-flash',
     apiKeyEnv: 'VITE_GEMINI_API_KEY',
     clientType: 'gemini',
-    supportsVision: true // Gemini 2.0 Flash supports vision
+    supportsVision: true
   },
   customized: {
     name: 'Customized',
@@ -35,13 +32,7 @@ export const llmProviders = {
     apiKeyEnv: 'VITE_CUSTOMIZED_API_KEY',
     clientType: 'customized',
     supportsVision: true, // User can enable/disable
-    supportsSpeech: false, // User can enable/disable
-    requiresConfiguration: true,
-    models: {
-      chat: '', // User-configurable
-      vision: '', // User-configurable
-      speech: '' // User-configurable
-    }
+    requiresConfiguration: true
   }
 };
 
