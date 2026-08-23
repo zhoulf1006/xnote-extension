@@ -10,7 +10,8 @@ pack:
 	echo "✓ Created pack/xnote_extension_$$timestamp.zip (Chrome Web Store ready)"
 	@echo "Restoring development manifest..."
 	@cp manifest.json dist/manifest.json
-	@echo "✓ Restored dist/manifest.json with 'key' field for local development"
+	@node scripts/apply-dev-manifest.js
+	@echo "✓ Restored dist/manifest.json with 'key' field and dev marker for local development"
 
 
 dev-pack:

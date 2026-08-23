@@ -5,16 +5,17 @@ import pngToIco from 'png-to-ico';
 
 const ICON_SIZES = [16, 32, 48, 128];
 const ICO_SIZES = [16, 32, 48];  // Common sizes for .ico files
-const BACKGROUND_COLOR = '#4A90E2';  // Blue background
+const BACKGROUND_COLOR = '#4A90E2';  // Blue background (production)
+const DEV_BACKGROUND_COLOR = '#E67E22';  // Orange background (dev builds, visually distinct in the toolbar)
 const ICON_COLOR = '#FFFFFF';  // White icon
 
-async function generateIcon(size) {
+async function generateIcon(size, bgColor = BACKGROUND_COLOR) {
     const canvas = createCanvas(size, size);
     const ctx = canvas.getContext('2d');
 
     // Draw background with rounded corners
     const radius = size * 0.15;
-    ctx.fillStyle = BACKGROUND_COLOR;
+    ctx.fillStyle = bgColor;
     ctx.beginPath();
     ctx.moveTo(radius, 0);
     ctx.lineTo(size - radius, 0);
@@ -48,7 +49,7 @@ async function generateIcon(size) {
     ctx.fill();
 
     // Draw the folded corner
-    ctx.fillStyle = BACKGROUND_COLOR;
+    ctx.fillStyle = bgColor;
     ctx.beginPath();
     ctx.moveTo(noteX + noteWidth - cornerSize, noteY);
     ctx.lineTo(noteX + noteWidth - cornerSize, noteY + cornerSize);
@@ -57,7 +58,7 @@ async function generateIcon(size) {
     ctx.fill();
 
     // Draw lines on the note
-    ctx.strokeStyle = BACKGROUND_COLOR;
+    ctx.strokeStyle = bgColor;
     ctx.lineWidth = size * 0.02;
     const lineSpacing = noteHeight * 0.15;
     const lineStartX = noteX + noteWidth * 0.15;
@@ -88,6 +89,15 @@ async function main() {
             const buffer = canvas.toBuffer('image/png');
             await fs.writeFile(path.join(outputDir, `icon-${size}.png`), buffer);
             console.log(`Generated icon-${size}.png`);
+        }
+
+        // Generate the orange dev icon set (used by dev builds via apply-dev-manifest.js)
+        const devDir = path.resolve('public/icons-dev');
+        await fs.ensureDir(devDir);
+        for (const size of ICON_SIZES) {
+            const canvas = await generateIcon(size, DEV_BACKGROUND_COLOR);
+            await fs.writeFile(path.join(devDir, `icon-${size}.png`), canvas.toBuffer('image/png'));
+            console.log(`Generated icons-dev/icon-${size}.png`);
         }
 
         // Generate .ico file

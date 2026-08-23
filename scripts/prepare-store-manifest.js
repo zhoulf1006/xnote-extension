@@ -12,6 +12,9 @@ const __dirname = path.dirname(__filename);
 
 // Define paths
 const distManifestPath = path.join(__dirname, '..', 'dist', 'manifest.json');
+const sourceManifestPath = path.join(__dirname, '..', 'manifest.json');
+const prodIconsDir = path.join(__dirname, '..', 'public', 'icons');
+const distIconsDir = path.join(__dirname, '..', 'dist', 'icons');
 
 try {
   // Check if dist/manifest.json exists
@@ -23,6 +26,15 @@ try {
   // Read the manifest.json from dist folder
   const manifestContent = fs.readFileSync(distManifestPath, 'utf8');
   const manifest = JSON.parse(manifestContent);
+
+  // Undo the dev-build marker (name suffix + orange icons) applied by apply-dev-manifest.js
+  const sourceManifest = JSON.parse(fs.readFileSync(sourceManifestPath, 'utf8'));
+  if (manifest.name !== sourceManifest.name) {
+    console.log(`✓ Restored production name: "${manifest.name}" -> "${sourceManifest.name}"`);
+    manifest.name = sourceManifest.name;
+  }
+  fs.cpSync(prodIconsDir, distIconsDir, { recursive: true });
+  console.log('✓ Restored production icon set');
 
   // Remove the "key" field if it exists
   if (manifest.key) {
