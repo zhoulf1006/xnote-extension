@@ -92,12 +92,12 @@ async function main() {
         }
 
         // Generate the orange dev icon set (used by dev builds via apply-dev-manifest.js)
-        const devDir = path.resolve('public/icons-dev');
+        const devDir = path.resolve('scripts/dev-icons');
         await fs.ensureDir(devDir);
         for (const size of ICON_SIZES) {
             const canvas = await generateIcon(size, DEV_BACKGROUND_COLOR);
             await fs.writeFile(path.join(devDir, `icon-${size}.png`), canvas.toBuffer('image/png'));
-            console.log(`Generated icons-dev/icon-${size}.png`);
+            console.log(`Generated scripts/dev-icons/icon-${size}.png`);
         }
 
         // Generate .ico file

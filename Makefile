@@ -6,7 +6,7 @@ pack:
 	@echo "Preparing manifest for Chrome Web Store..."
 	@node scripts/prepare-store-manifest.js
 	@timestamp=$$(date +%Y%m%d%H%M); \
-	zip -r pack/xnote_extension_$$timestamp.zip dist; \
+	(cd dist && zip -qr ../pack/xnote_extension_$$timestamp.zip . -x '.DS_Store' '*/.DS_Store'); \
 	echo "✓ Created pack/xnote_extension_$$timestamp.zip (Chrome Web Store ready)"
 	@echo "Restoring development manifest..."
 	@cp manifest.json dist/manifest.json

@@ -11,7 +11,8 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const distManifestPath = path.join(__dirname, '..', 'dist', 'manifest.json');
-const devIconsDir = path.join(__dirname, '..', 'public', 'icons-dev');
+// Kept outside public/ so Vite does not copy the dev icons into the store package
+const devIconsDir = path.join(__dirname, 'dev-icons');
 const distIconsDir = path.join(__dirname, '..', 'dist', 'icons');
 
 const manifest = JSON.parse(fs.readFileSync(distManifestPath, 'utf8'));
