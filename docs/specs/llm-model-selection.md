@@ -29,7 +29,7 @@ The LLM Provider Configuration modal gains per-provider **Chat model** and **Vis
 
 **打开配置弹窗:**
 
-1. 未配 key 的 provider → 不发起拉取;信息提示「配置 key 才能加载列表,手输仍可用」;下拉仅含手输入口;当前已选值(如有)照常显示。
+1. 未配 key 的 provider → 不自动拉取;信息提示「配置 key 才能加载列表,手输仍可用」;下拉仅含手输入口;当前已选值(如有)照常显示。刷新按钮保持可点:key 输入框中**刚输入、尚未保存**的 key 也可直接点刷新拉取;输入框为空时点刷新仅显示无 key 提示。
 2. 已配 key → 自动拉取;拉取期间下拉与刷新钮禁用、显示加载态;已有缓存列表时先显示缓存(stale-while-revalidate)。
 3. 拉取返回 401 → 红色错误提示指向 key 输入框;有缓存则列表退回缓存,无缓存则仅手输;不清除已存 key 与已选模型。
 4. 网络失败/超时(拉取 15 秒无响应即中止)/非 JSON/结构不符 → 警告提示;有缓存则显示缓存并标注拉取时间(相对时间),无缓存则仅手输。
@@ -41,7 +41,8 @@ The LLM Provider Configuration modal gains per-provider **Chat model** and **Vis
 7. 已选模型不在本次拉取结果中(已下线/改名)→ 选中值仍显示在选择框;展开列表中无对应项、无勾选;不自动清除或替换用户的选择。
 8. 手输空串或纯空白 → 不生效;输入值先 trim。
 9. 手输的 ID 不做存在性校验(逃生口设计)——错误 ID 在真正调用时由既有 provider 错误路径报出。
-10. Vision 选择「Same as chat model」(默认)→ 图像分析解析为:vision 选择 → chat 选择 → provider 兜底默认,三级回退。
+10. Vision 选择「Same as chat model」(默认)→ 图像分析解析为:vision 选择 → chat 选择 → provider 兜底默认,三级回退;回退到的模型不具备视觉能力时,由 provider 请求期错误路径报出。
+10a. Vision 下拉仅列判定为具备视觉能力的模型(list API 无能力元数据,按名称启发式判定:DeepSeek 取含 vision/vl 的 ID,OpenAI 取多模态家族前缀;Gemini 与 Customized 不过滤);手输任意 ID 不受此限。
 11. 列表项与选中值均为不受信文本(尤其 Customized 任意端点返回的 ID):一律按纯文本渲染,不解释 HTML;超长 ID 在列表内换行、在选择框内截断省略;不引入链接/脚本等新交互面。
 12. 超长列表(OpenAI 原始 ~70+,过滤后仍数十)→ 列表内部滚动,展开走文档流下推内容(弹窗是滚动容器,悬浮层会被裁——原型已验证该结论)。
 
@@ -79,7 +80,7 @@ The LLM Provider Configuration modal gains per-provider **Chat model** and **Vis
 - **模型目录服务**(新模块,纯逻辑为主):按 provider 类型封装 list-models 的请求构造、响应解析、过滤、缓存读写。过滤规则:Gemini 以 supportedGenerationMethods 含 generateContent 为准并剥离名称前缀;OpenAI 用排除式启发(命中 embedding/tts/whisper/transcribe/dall-e/image/moderation/realtime/audio 任一子串即排除);DeepSeek 不过滤;Customized 从 `{baseURL}/models` 取、不过滤,baseURL 尾斜杠须归一化。
 - **注册表瘦身**:provider 注册表只保留每 provider 一个兜底默认模型;死配置(无消费者的 models 子对象、visionModel 引用及 supportsSpeech 标志)随本次重写删除(已核实全库无消费者)。
 - **存储契约**:每 provider 的 {chat, vision} 选择走既有同步存储路径;列表缓存(含拉取时间戳)走本地存储。vision 为空表示「Same as chat model」。
-- **UI 结论**(已经原型确认):既有弹窗内联扩展——provider 单选之下,key 行之后,依次 Chat model 行(带刷新图标钮)与 Vision model 行;**Vision 行仅对 supportsVision 的 provider 渲染**(如 DeepSeek 只有 Chat 行);选择框展开为文档流内列表(内部滚动,不悬浮),点击选择框外关闭;列表末尾固定「Enter custom model ID…」入口展开手输行;四种状态提示(加载/401/网络错误·缓存/未配 key)为行下条幅;Vision 首项为「Same as chat model」;行下有兜底默认提示行。图标沿用项目 Font Awesome 类。
+- **UI 结论**(已经原型确认):既有弹窗内联扩展——provider 单选之下,key 行之后,依次 Chat model 行(带刷新图标钮)与 Vision model 行;**Vision 行仅对 supportsVision 的 provider 渲染**;选择框展开为文档流内列表(内部滚动,不悬浮),点击选择框外关闭;列表末尾固定「Enter custom model ID…」入口展开手输行;四种状态提示(加载/401/网络错误·缓存/未配 key)为行下条幅;Vision 首项为「Same as chat model」;行下有兜底默认提示行。图标沿用项目 Font Awesome 类。
 - **Customized**:能力区各模型输入升级为同款选择框,候选来自 fetch 助手;助手按钮位于 Base URL 之下。
 
 ## Testing Decisions
