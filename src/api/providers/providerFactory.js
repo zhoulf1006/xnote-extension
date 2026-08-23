@@ -14,11 +14,14 @@ export class ProviderFactory {
    * @returns {Promise<Object>} The configured client, provider configuration, and requiresConfiguration flag
    */
   static async createProvider(providerName, allowEmptyKeys = false) {
-    const providerConfig = llmProviders[providerName];
+    const registryConfig = llmProviders[providerName];
 
-    if (!providerConfig) {
+    if (!registryConfig) {
       throw new Error(`Unknown provider: ${providerName}`);
     }
+
+    // Carry the registry key so providers can resolve their stored model selection
+    const providerConfig = { ...registryConfig, key: providerName };
 
     // Get API key, allowing empty values (don't throw on missing key)
     const apiKey = await ProviderFactory.getApiKey(providerConfig, true);
@@ -102,11 +105,11 @@ export class ProviderFactory {
    * Create and configure a Gemini client
    * @param {Object} config - The provider configuration
    * @param {string} apiKey - The API key
-   * @returns {Object} The configured Gemini client
+   * @returns {GoogleGenerativeAI} The Gemini API client (model instance is
+   *   created per request so the user's model selection applies immediately)
    */
   static createGeminiClient(config, apiKey) {
-    const genAI = new GoogleGenerativeAI(apiKey);
-    return genAI.getGenerativeModel({ model: config.model });
+    return new GoogleGenerativeAI(apiKey);
   }
 
   /**
