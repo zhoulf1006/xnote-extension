@@ -9,11 +9,25 @@ class EncryptionService {
     this.encryptionKey = null
     this.saltPrefix = 'xnote-'
     
-    // Use a deterministic password for now - in production this could be:
-    // 1. User-provided master password
-    // 2. Device-specific identifier
-    // 3. Hardware-based key generation
-    this.masterPassword = this.generateDeviceKey()
+    // Derived on first use rather than here: this module exports a singleton, so
+    // constructing it at import time read browser-only globals (screen, navigator)
+    // and made every module that transitively imports it unimportable outside a
+    // browser. The value is deterministic, so deferring it changes nothing else.
+    this._masterPassword = null
+  }
+
+  /**
+   * Deterministic device-specific password, derived on first access.
+   * Use a deterministic password for now - in production this could be:
+   * 1. User-provided master password
+   * 2. Device-specific identifier
+   * 3. Hardware-based key generation
+   */
+  get masterPassword() {
+    if (this._masterPassword === null) {
+      this._masterPassword = this.generateDeviceKey()
+    }
+    return this._masterPassword
   }
 
   /**
