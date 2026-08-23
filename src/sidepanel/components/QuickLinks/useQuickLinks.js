@@ -156,8 +156,15 @@ export function useQuickLinks() {
   }
 
   const deleteCategory = (categoryName) => {
+    // Deleting a category removes its links too, so name the cost in the prompt
+    const linkCount = quickLinksData.value?.models
+      ?.find(model => model.name === categoryName)?.links?.length || 0
+    const message = linkCount > 0
+      ? `Delete the category "${categoryName}" and the ${linkCount} link${linkCount === 1 ? '' : 's'} inside it?`
+      : `Are you sure you want to delete the category "${categoryName}"?`
+
     pendingConfirm.value = {
-      message: `Are you sure you want to delete the category "${categoryName}"?`,
+      message,
       action: async () => {
         try {
           await quickLinksService.deleteCategory(categoryName)
