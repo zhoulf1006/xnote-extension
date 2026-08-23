@@ -232,12 +232,20 @@
         </div>
       </div>
     </div>
+
+    <ConfirmDialog
+      :show="!!pendingConfirm"
+      :message="pendingConfirm?.message || ''"
+      @confirm="confirmPending"
+      @cancel="cancelPending"
+    />
   </div>
 </template>
 
 <script setup>
 import { onMounted } from 'vue'
 import { useQuickLinks } from './useQuickLinks.js'
+import ConfirmDialog from '../Common/ConfirmDialog.vue'
 
 // Destructure all composable methods and state
 const {
@@ -278,6 +286,9 @@ const {
   saveCategory,
   cancelEditCategory,
   deleteCategory,
+  pendingConfirm,
+  confirmPending,
+  cancelPending,
 
   // Link Methods
   addLink,

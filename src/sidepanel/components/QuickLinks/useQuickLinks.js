@@ -140,17 +140,33 @@ export function useQuickLinks() {
     editingCategoryName.value = ''
   }
 
-  const deleteCategory = async (categoryName) => {
-    if (!confirm(`Are you sure you want to delete the category "${categoryName}"?`)) {
-      return
-    }
+  // In-app confirmation state: window.confirm() is suppressed in Chrome
+  // extension side panels (returns false without showing a dialog), so
+  // destructive actions confirm through ConfirmDialog instead.
+  const pendingConfirm = ref(null) // { message, action: async () => {} }
 
-    try {
-      await quickLinksService.deleteCategory(categoryName)
-      await loadQuickLinks()
-      error.value = null
-    } catch (err) {
-      error.value = quickLinksService.formatError(err)
+  const confirmPending = async () => {
+    const pending = pendingConfirm.value
+    pendingConfirm.value = null
+    if (pending) await pending.action()
+  }
+
+  const cancelPending = () => {
+    pendingConfirm.value = null
+  }
+
+  const deleteCategory = (categoryName) => {
+    pendingConfirm.value = {
+      message: `Are you sure you want to delete the category "${categoryName}"?`,
+      action: async () => {
+        try {
+          await quickLinksService.deleteCategory(categoryName)
+          await loadQuickLinks()
+          error.value = null
+        } catch (err) {
+          error.value = quickLinksService.formatError(err)
+        }
+      }
     }
   }
 
@@ -214,17 +230,18 @@ export function useQuickLinks() {
     editingLinkData.url = ''
   }
 
-  const deleteLink = async (categoryName, linkUrl) => {
-    if (!confirm('Are you sure you want to delete this link?')) {
-      return
-    }
-
-    try {
-      await quickLinksService.deleteLink(categoryName, linkUrl)
-      await loadQuickLinks()
-      error.value = null
-    } catch (err) {
-      error.value = quickLinksService.formatError(err)
+  const deleteLink = (categoryName, linkUrl) => {
+    pendingConfirm.value = {
+      message: 'Are you sure you want to delete this link?',
+      action: async () => {
+        try {
+          await quickLinksService.deleteLink(categoryName, linkUrl)
+          await loadQuickLinks()
+          error.value = null
+        } catch (err) {
+          error.value = quickLinksService.formatError(err)
+        }
+      }
     }
   }
 
@@ -598,6 +615,9 @@ export function useQuickLinks() {
     saveCategory,
     cancelEditCategory,
     deleteCategory,
+    pendingConfirm,
+    confirmPending,
+    cancelPending,
 
     // Link Methods
     addLink,
