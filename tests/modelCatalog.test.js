@@ -17,7 +17,8 @@ import {
   normalizeBaseUrl,
   buildModelsRequest,
   createModelCatalog,
-  withTimeout
+  withTimeout,
+  filterVisionCapable
 } from '../src/api/modelCatalog.js';
 
 /** In-memory cache store with the injected-store contract. */
@@ -142,6 +143,29 @@ describe('parseModelsResponse — malformed shapes', () => {
   test('an empty list parses to an empty array, not an error', () => {
     expect(parseModelsResponse('deepseek', { object: 'list', data: [] })).toEqual([]);
     expect(parseModelsResponse('gemini', { models: [] })).toEqual([]);
+  });
+});
+
+// The list APIs expose no capability metadata, so vision capability is a
+// name-based heuristic per provider; the manual model-ID entry is the escape hatch.
+describe('filterVisionCapable', () => {
+  test('deepseek: only vision/vl-named models', () => {
+    expect(filterVisionCapable('deepseek',
+      ['deepseek-chat', 'deepseek-reasoner', 'deepseek-v4-flash-vision-exp', 'deepseek-vl2']))
+      .toEqual(['deepseek-v4-flash-vision-exp', 'deepseek-vl2']);
+  });
+
+  test('openai: multimodal families kept, text-only families dropped', () => {
+    expect(filterVisionCapable('openai',
+      ['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4-turbo', 'gpt-3.5-turbo', 'chatgpt-4o-latest', 'o3-mini', 'gpt-5.2']))
+      .toEqual(['gpt-4o', 'gpt-4o-mini', 'gpt-4.1', 'gpt-4-turbo', 'chatgpt-4o-latest', 'o3-mini', 'gpt-5.2']);
+  });
+
+  test('gemini and customized: passthrough (gemini chat models are multimodal; customized is unknown)', () => {
+    expect(filterVisionCapable('gemini', ['gemini-2.0-flash', 'gemini-2.5-pro']))
+      .toEqual(['gemini-2.0-flash', 'gemini-2.5-pro']);
+    expect(filterVisionCapable('customized', ['some/model-a', 'some/model-b']))
+      .toEqual(['some/model-a', 'some/model-b']);
   });
 });
 

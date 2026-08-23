@@ -215,7 +215,7 @@
               <button type="button"
                       class="ms-refresh"
                       title="Refresh model list"
-                      :disabled="modelFetch[selectedProvider] === 'loading' || modelFetch[selectedProvider] === 'no-key'"
+                      :disabled="modelFetch[selectedProvider] === 'loading'"
                       @click="loadModelsFor(selectedProvider)">
                 <i class="fas fa-sync" :class="{ 'fa-spin': modelFetch[selectedProvider] === 'loading' }"></i>
               </button>
@@ -227,7 +227,7 @@
             <template v-if="llmProviders[selectedProvider].supportsVision">
               <div class="ms-field-label"><span>Vision model</span></div>
               <ModelSelect v-model="modelSelections[selectedProvider].vision"
-                           :options="currentModels"
+                           :options="visionModels"
                            null-label="Same as chat model"
                            :disabled="modelFetch[selectedProvider] === 'loading'" />
             </template>
@@ -477,6 +477,7 @@ import FolderBrowser from './components/FolderBrowser/index.vue';
 import { modelCatalogService, modelSelectionStore } from '@/api/modelConfigService';
 import ConfirmDialog from './components/Common/ConfirmDialog.vue';
 import { confirmAction, useConfirmHost } from './composables/useConfirm';
+import { filterVisionCapable } from '@/api/modelCatalog';
 
 const navigationStore = useNavigationStore();
 // Single app-wide confirmation dialog host (window.confirm is suppressed in side panels)
@@ -548,6 +549,10 @@ const modelFetch = ref({ openai: 'idle', deepseek: 'idle', gemini: 'idle', custo
 let modelFetchSeq = 0; // guards against stale responses populating a switched-away provider
 
 const currentModels = computed(() => modelList.value[selectedProvider.value]?.models || []);
+
+// Vision dropdown shows only vision-capable models (name heuristic — the list
+// APIs expose no capability metadata; manual entry remains the escape hatch)
+const visionModels = computed(() => filterVisionCapable(selectedProvider.value, currentModels.value));
 
 const modelNote = computed(() => {
   const provider = selectedProvider.value;

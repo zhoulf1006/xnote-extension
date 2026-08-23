@@ -153,7 +153,7 @@ const MODELS = {
 };
 const PROVIDERS = [
   { key: "openai",     name: "OpenAI",     hasKey: true,  supportsVision: true  },
-  { key: "deepseek",   name: "DeepSeek",   hasKey: true,  supportsVision: false }, // Vision 行仅对支持视觉的 provider 渲染(实现定稿)
+  { key: "deepseek",   name: "DeepSeek",   hasKey: true,  supportsVision: true }, // Vision 行仅对支持视觉的 provider 渲染;DeepSeek 已支持视觉模型(2026-08 定稿)
   { key: "gemini",     name: "Gemini",     hasKey: false, supportsVision: true  },   // 天然演示"未配 key"态
   { key: "customized", name: "Customized", hasKey: true  }
 ];

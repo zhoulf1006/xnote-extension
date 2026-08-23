@@ -16,7 +16,7 @@ export const llmProviders = {
     defaultModel: 'deepseek-chat',
     apiKeyEnv: 'VITE_DEEPSEEK_API_KEY',
     clientType: 'openai',
-    supportsVision: false // DeepSeek API does not support vision
+    supportsVision: true // DeepSeek offers vision models (e.g. the vision-exp line)
   },
   gemini: {
     name: 'Gemini',
