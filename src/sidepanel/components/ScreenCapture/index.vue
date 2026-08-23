@@ -16,7 +16,7 @@
       <i class="fas fa-exclamation-triangle"></i>
       <div class="warning-content">
         <strong>{{ currentProviderName }} does not support image analysis</strong>
-        <p>Please switch to OpenAI or Gemini in LLM Config to use the screenshot capture feature.</p>
+        <p>Please switch to a provider that supports image analysis in LLM Config to use the screenshot capture feature.</p>
         <button @click="openLLMConfig" class="config-link-btn">
           <i class="fas fa-cog"></i>
           Open LLM Config
@@ -48,7 +48,7 @@
     <div v-if="isProcessing" class="processing-status">
       <div class="processing-indicator">
         <i class="fas fa-spinner fa-spin"></i>
-        <span>Analyzing image with {{ currentProviderName }}...</span>
+        <span>Analyzing image with {{ currentProviderName }}{{ analyzingModel ? ' (' + analyzingModel + ')' : '' }}...</span>
       </div>
     </div>
 
@@ -116,6 +116,7 @@ import { ref, computed, onMounted, watch, onUnmounted } from 'vue';
 import { useLLMConfigStore } from '@/stores/llmConfig';
 import { llmService } from '@/api/llm';
 import { llmProviders } from '@/config/llmProviders';
+import { resolveModelFor } from '@/api/modelConfigService';
 import screenshotService from '@/api/screenshotService';
 import CaptureControls from './CaptureControls.vue';
 import ImagePreview from './ImagePreview.vue';
@@ -141,14 +142,13 @@ const hidePreview = ref(false);
 const selectedPrompt = ref('Extract all text from this image accurately. Preserve formatting and structure.');
 
 // Computed
-const currentProviderName = computed(() => {
-  const providers = {
-    'openai': 'OpenAI',
-    'deepseek': 'DeepSeek',
-    'gemini': 'Gemini 2.0 Flash'
-  };
-  return providers[llmConfigStore.selectedProvider] || llmConfigStore.selectedProvider;
-});
+const currentProviderName = computed(() =>
+  llmProviders[llmConfigStore.selectedProvider]?.name || llmConfigStore.selectedProvider
+);
+
+// The vision model actually used for the current analysis (resolved when analysis
+// starts; null for the customized provider, whose model lives in its own config)
+const analyzingModel = ref(null);
 
 const providerSupportsVision = computed(() => {
   const currentProvider = llmConfigStore.selectedProvider;
@@ -228,7 +228,7 @@ async function startCapture() {
   try {
     // Check if provider supports vision
     if (!providerSupportsVision.value) {
-      error.value = `${currentProviderName.value} does not support image analysis. Please switch to OpenAI or Gemini.`;
+      error.value = `${currentProviderName.value} does not support image analysis. Please switch to a provider that supports image analysis.`;
       return;
     }
 
@@ -257,7 +257,7 @@ async function handlePasteImage() {
   try {
     // Check if provider supports vision
     if (!providerSupportsVision.value) {
-      error.value = `${currentProviderName.value} does not support image analysis. Please switch to OpenAI or Gemini.`;
+      error.value = `${currentProviderName.value} does not support image analysis. Please switch to a provider that supports image analysis.`;
       return;
     }
 
@@ -336,6 +336,10 @@ async function processScreenshot(imageData, cropData, source = 'screenshot') {
     isProcessing.value = true;
     isStreaming.value = false;
     extractedText.value = '';
+
+    // Resolve the vision model for the progress label (built-in providers only)
+    const provider = llmConfigStore.selectedProvider;
+    analyzingModel.value = provider === 'customized' ? null : await resolveModelFor(provider, 'vision');
 
     // Crop the image if crop data is provided
     let processedImage = imageData;
