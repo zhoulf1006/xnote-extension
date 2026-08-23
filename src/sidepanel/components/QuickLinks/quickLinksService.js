@@ -4,6 +4,7 @@
  */
 
 import linksService from '../../../api/linksService.js'
+import { pickCategory } from '../../composables/useCategoryPicker.js'
 
 class QuickLinksService {
   constructor() {
@@ -104,25 +105,14 @@ class QuickLinksService {
   /**
    * Component-specific utility: Show save page dialog
    */
-  showSavePageDialog(pageInfo, categories) {
+  async showSavePageDialog(pageInfo, categories) {
     if (!categories || categories.length === 0) {
       throw new Error('No categories available. Please add a category first.')
     }
-    
-    // Simple prompt for category selection (could be enhanced with a proper modal)
-    const categoryList = categories.map((cat, idx) => `${idx + 1}. ${cat.name}`).join('\n')
-    const categoryIndex = prompt(
-      `Save "${pageInfo.title}" to which category?\n\nOptions:\n${categoryList}\n\nEnter the number:`
-    )
-    
-    if (categoryIndex && !isNaN(categoryIndex)) {
-      const selectedIndex = parseInt(categoryIndex) - 1
-      if (selectedIndex >= 0 && selectedIndex < categories.length) {
-        return categories[selectedIndex].name
-      }
-    }
-    
-    return null
+
+    // window.prompt() is suppressed in extension side panels, so the user picks
+    // from a list instead of typing an index
+    return await pickCategory(pageInfo.title, categories)
   }
 
   /**

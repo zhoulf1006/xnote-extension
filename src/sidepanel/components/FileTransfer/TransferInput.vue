@@ -34,6 +34,7 @@
 
 <script setup>
 import { ref } from 'vue';
+import { notify } from '@/sidepanel/composables/useToast';
 
 const props = defineProps({
   isUploading: {
@@ -77,7 +78,7 @@ const handleDrop = (event) => {
 const processFile = (file) => {
   // Validate file size
   if (file.size > MAX_FILE_SIZE) {
-    alert(`File is too large. Maximum size is 25MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB.`);
+    notify.error(`File is too large. Maximum size is 25MB. Your file is ${(file.size / 1024 / 1024).toFixed(2)}MB.`);
     return;
   }
 

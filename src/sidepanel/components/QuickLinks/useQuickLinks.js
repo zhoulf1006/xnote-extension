@@ -443,14 +443,14 @@ export function useQuickLinks() {
   }
 
   // Save page dialog functionality
-  const showSavePageDialog = (pageInfo) => {
+  const showSavePageDialog = async (pageInfo) => {
     if (!quickLinksData.value?.models?.length) {
       error.value = 'No categories available. Please add a category first.'
       return
     }
     
     try {
-      const categoryName = quickLinksService.showSavePageDialog(pageInfo, quickLinksData.value.models)
+      const categoryName = await quickLinksService.showSavePageDialog(pageInfo, quickLinksData.value.models)
       if (categoryName) {
         savePageToCategory(categoryName, pageInfo.title, pageInfo.url)
       }

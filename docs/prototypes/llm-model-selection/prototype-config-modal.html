@@ -1,17 +1,20 @@
 <!doctype html>
 <!--
-  原型:LLM Config modal — dynamic model selection(Direction A: inline rows)
-  问题:在既有 LLM Provider Configuration modal 内,按 provider 提供
-       Chat/Vision 两个模型选择行(列表来自各 provider 的 list-models API),
-       loading / 401 / 网络错误(降级缓存)/ 无 key 各状态长什么样?
-       自由文本逃生口与 Customized provider 的 fetch 助手如何呈现?
-  语境外壳:XNote 侧边栏(左侧 48px 导航栏 + 内容区)为简化 mock,仅提供评判语境,非本原型评判对象。
-  演示基建(data-demo-harness,非设计的一部分,勿实现):
-    - 底部悬浮暗色 pill:「演示·拉取状态」(已加载/加载中/401 错误/网络错误·缓存/未配 key)
-      —— 真实判定来源:模型列表拉取的实际结果与 key 配置状态,app 内无此开关;
-    - 「演示·面板宽度」(360/420/480)—— 真实来源:用户拖动侧边栏宽度。
-  图标注:原型内联简化描边图标示意;实现沿用项目 Font Awesome 类
-        (fa-rotate-right / fa-chevron-down / fa-check-circle / fa-exclamation-triangle / fa-flask)。
+  Prototype: LLM Config modal — dynamic model selection (Direction A: inline rows)
+  Question: inside the existing LLM Provider Configuration modal, give each provider a
+       Chat and a Vision model row fed by that provider's list-models API. What do the
+       loading / 401 / network-error (cached fallback) / no-key states look like, and
+       how are the free-text escape hatch and the Customized provider's fetch assist
+       presented?
+  Context shell: the XNote side panel (48px rail + content area) is a simplified mock
+       that only supplies judging context; it is not what this prototype judges.
+  Demo harness (data-demo-harness, NOT part of the design, do not implement):
+    - floating dark pill at the bottom: fetch state (loaded / loading / 401 error /
+      network error with cache / no key) — really determined by the fetch outcome and
+      the key configuration state; the app has no such switch;
+    - panel width (360/420/480) — really determined by the user dragging the panel.
+  Icon note: this page inlines simplified stroke icons; the implementation reuses the
+       project's Font Awesome classes.
 -->
 <html lang="en">
 <head>
@@ -22,7 +25,7 @@
   html, body { margin: 0; padding: 0; background: #e9e6f0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
   .stage { display: flex; justify-content: center; padding: 24px 0 96px; }
 
-  /* ===== 侧边栏外壳(语境 mock) ===== */
+  /* ===== Side panel shell (context mock) ===== */
   .panel { width: 420px; height: 640px; background: #f8f9fa; display: flex; box-shadow: 0 4px 24px rgba(0,0,0,.18); position: relative; overflow: hidden; }
   .rail { width: 48px; background: rgba(103,58,183,.15); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; }
   .rail .ric { width: 48px; height: 48px; display: grid; place-items: center; color: rgba(0,0,0,.8); }
@@ -32,7 +35,7 @@
   .mock-line { height: 10px; border-radius: 5px; background: #eceef1; margin: 10px 4px; }
   .mock-line.w60 { width: 60%; } .mock-line.w80 { width: 80%; } .mock-line.w40 { width: 40%; }
 
-  /* ===== Modal(评判对象) ===== */
+  /* ===== Modal (the subject being judged) ===== */
   .overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 100; }
   .modal { background: #fff; border-radius: 8px; width: calc(100% - 32px); max-width: 400px; max-height: calc(100% - 48px); overflow-y: auto; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.1); }
   .modal h2 { font-size: 16px; margin: 0 0 14px; color: #333; }
@@ -51,13 +54,13 @@
   .key-ok { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: #2e7d32; white-space: nowrap; }
   .hint { font-size: 11px; color: #666; margin-top: 4px; }
 
-  /* 图标按钮:固定盒 + 居中(第 6 节) */
+  /* Icon button: fixed box, centred glyph */
   .icon-btn { width: 24px; height: 24px; display: grid; place-items: center; border: none; background: transparent; color: #673ab7; border-radius: 4px; cursor: pointer; padding: 0; }
   .icon-btn:hover { background: rgba(103,58,183,.12); }
   .icon-btn:disabled { color: #adb5bd; cursor: default; }
   .icon-btn:disabled:hover { background: transparent; }
 
-  /* ===== 模型 combobox ===== */
+  /* ===== Model combobox ===== */
   .combo { position: relative; }
   .combo-btn { width: 100%; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #ddd; border-radius: 4px; background: #fff; font-size: 13px; font-family: monospace; color: #333; cursor: pointer; text-align: left; }
   .combo-btn:hover { border-color: #adb5bd; }
@@ -66,13 +69,14 @@
   .combo-btn .val { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .combo-btn .val.placeholder { color: #999; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
   .combo-btn .chev { flex: none; color: #6c757d; }
-  /* 列表走文档流(向下推开内容),不悬浮——modal 是滚动容器,悬浮层会被裁 */
+  /* The list expands in the document flow instead of floating: the modal is a scroll
+     container, so a floating layer would be clipped */
   .dd { margin-top: 4px; background: #fff; border: 1px solid #dee2e6; border-radius: 6px; display: flex; flex-direction: column; gap: 2px; padding: 4px; max-height: 180px; overflow-y: auto; }
   .dd-item { padding: 6px 8px; border-radius: 4px; font-size: 12.5px; font-family: monospace; color: #333; cursor: pointer; display: flex; align-items: center; gap: 6px; }
   .dd-item .label { flex: 1; min-width: 0; overflow-wrap: anywhere; }
   .dd-item .label.sysfont { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
   .dd-item:hover { background: rgba(103,58,183,.07); }
-  .dd-item.selected { background: rgba(103,58,183,.16); }   /* 同族加深;源序在后 → 悬浮时仍胜出 */
+  .dd-item.selected { background: rgba(103,58,183,.16); }   /* One shade deeper than hover, declared later so it wins while hovered */
   .dd-item.meta { font-family: -apple-system, "Segoe UI", Roboto, sans-serif; color: #673ab7; font-weight: 500; font-size: 12px; border-top: 1px solid #eee; border-radius: 0 0 4px 4px; margin-top: 2px; position: sticky; bottom: -4px; background: #fff; }
   .dd-item.meta:hover { background: rgba(103,58,183,.07); }
   .custom-row { display: flex; gap: 6px; margin-top: 6px; }
@@ -80,7 +84,7 @@
   .custom-row button { border: 1px solid #ba92ff; background: transparent; color: #673ab7; border-radius: 4px; font-size: 12px; padding: 0 10px; cursor: pointer; }
   .custom-row button:hover { background: #ba92ff; color: #fff; }
 
-  /* 状态条 */
+  /* State notes */
   .state-note { display: flex; align-items: flex-start; gap: 6px; font-size: 11.5px; border-radius: 4px; padding: 6px 8px; margin-top: 6px; line-height: 1.4; }
   .state-note.err { background: #ffeaea; color: #c62828; }
   .state-note.warn { background: #fff3cd; color: #8a6d1a; }
@@ -102,7 +106,7 @@
   .actions .save:hover { background: #a36dff; }
   .actions .cancel { background: #fff; color: #495057; }
 
-  /* ===== 演示 harness(独立悬浮层,非设计) ===== */
+  /* ===== Demo harness (separate floating layer, not design) ===== */
   [data-demo-harness] { position: fixed; left: 0; right: 0; bottom: 16px; margin: 0 auto; width: max-content; max-width: calc(100vw - 24px); background: #23212e; color: #cfc9e0; border-radius: 999px; display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 12px; box-shadow: 0 4px 16px rgba(0,0,0,.35); z-index: 999; }
   [data-demo-harness] .grp { display: flex; align-items: center; gap: 6px; }
   [data-demo-harness] .sep { width: 1px; height: 18px; background: #4a4560; }
@@ -129,22 +133,22 @@
     </div>
 
     <div class="overlay">
-      <div class="modal" id="modal"><!-- JS 渲染 --></div>
+      <div class="modal" id="modal"><!-- rendered by JS --></div>
     </div>
   </div>
 </div>
 
-<!-- 演示 harness:非设计的一部分,勿实现 -->
+<!-- Demo harness: not part of the design, do not implement -->
 <div data-demo-harness>
-  <span style="opacity:.65">演示·拉取状态</span>
+  <span style="opacity:.65">demo · fetch state</span>
   <div class="grp" id="h-state"></div>
   <div class="sep"></div>
-  <span style="opacity:.65">演示·面板宽度</span>
+  <span style="opacity:.65">demo · panel width</span>
   <div class="grp" id="h-width"></div>
 </div>
 
 <script>
-/* ===== Mock 数据(刻意含最长 ID 与边界情形) ===== */
+/* ===== Mock data (deliberately includes the longest IDs and edge cases) ===== */
 const MODELS = {
   openai: ["gpt-5.2","gpt-5.2-mini","gpt-5.1","gpt-5","gpt-5-mini","gpt-5-nano","gpt-4.1","gpt-4.1-mini","gpt-4o","gpt-4o-mini","chatgpt-4o-latest","o4","o4-mini","o3","o3-mini","gpt-4o-audio-preview-2024-12-17","gpt-4.1-2025-04-14","gpt-4-turbo","gpt-3.5-turbo"],
   deepseek: ["deepseek-chat","deepseek-reasoner","deepseek-v4-flash","deepseek-v4-pro"],
@@ -153,14 +157,14 @@ const MODELS = {
 };
 const PROVIDERS = [
   { key: "openai",     name: "OpenAI",     hasKey: true,  supportsVision: true  },
-  { key: "deepseek",   name: "DeepSeek",   hasKey: true,  supportsVision: true }, // Vision 行仅对支持视觉的 provider 渲染;DeepSeek 已支持视觉模型(2026-08 定稿)
-  { key: "gemini",     name: "Gemini",     hasKey: false, supportsVision: true  },   // 天然演示"未配 key"态
+  { key: "deepseek",   name: "DeepSeek",   hasKey: true,  supportsVision: true }, // The Vision row renders only for vision-capable providers; DeepSeek now ships vision models
+  { key: "gemini",     name: "Gemini",     hasKey: false, supportsVision: true  },   // naturally demonstrates the "no key" state
   { key: "customized", name: "Customized", hasKey: true  }
 ];
 const state = {
   provider: "deepseek",
-  fetch: "loaded",              // loaded | loading | err401 | errnet | nokey(强制覆盖)
-  sel: {                        // 已选模型(vision null = Same as chat)
+  fetch: "loaded",              // loaded | loading | err401 | errnet | nokey (forced override)
+  sel: {                        // current selections (vision null = same as chat)
     openai:   { chat: "gpt-4o", vision: "gpt-4o" },
     deepseek: { chat: "deepseek-chat", vision: null },
     gemini:   { chat: "gemini-2.0-flash", vision: null },
@@ -170,11 +174,11 @@ const state = {
                     vision:{on:true, model:""},
                     speech:{on:false, model:"tts-1"} },
             fetched: false },
-  openDD: null,                 // 当前展开的 combobox id
-  customInput: null             // 正在自由输入的 combobox id
+  openDD: null,                 // id of the currently expanded combobox
+  customInput: null             // id of the combobox in free-text entry mode
 };
 
-/* ===== 图标(内联描边示意;实现用项目 FA 类) ===== */
+/* ===== Icons (inline stroke placeholders; implementation uses the project's FA classes) ===== */
 const I = {
   refresh: c => `<svg class="${c||''}" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/></svg>`,
   chev: `<svg class="chev" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>`,
@@ -186,7 +190,7 @@ const I = {
 const fmtState = () => state.fetch === "nokey" ? "nokey"
   : (!PROVIDERS.find(p=>p.key===state.provider).hasKey ? "nokey" : state.fetch);
 
-/* ===== combobox 渲染 ===== */
+/* ===== Combobox rendering ===== */
 function combo(id, value, placeholder, list, opts={}) {
   const st = fmtState();
   const disabled = st==="loading";
@@ -287,8 +291,8 @@ function render() {
   const ci = document.querySelector("[id^='ci-']"); if (ci) ci.focus();
 }
 
-/* ===== 演示 harness ===== */
-const H_STATES = [["loaded","已加载"],["loading","加载中"],["err401","401 错误"],["errnet","网错·缓存"],["nokey","未配 key"]];
+/* ===== Demo harness ===== */
+const H_STATES = [["loaded","loaded"],["loading","loading"],["err401","401 error"],["errnet","net err · cached"],["nokey","no key"]];
 const H_WIDTHS = [360,420,480];
 function renderHarness() {
   document.getElementById("h-state").innerHTML = H_STATES.map(([k,l]) =>
@@ -297,7 +301,7 @@ function renderHarness() {
     `<button class="hbtn ${document.getElementById("panel").style.width===w+"px"||(!document.getElementById("panel").style.width&&w===420)?'on':''}" data-hwidth="${w}">${w}</button>`).join("");
 }
 
-/* ===== 交互 ===== */
+/* ===== Interaction ===== */
 document.addEventListener("click", e => {
   const t = e.target;
   const pick = t.closest("[data-pick]");
@@ -319,7 +323,7 @@ document.addEventListener("click", e => {
     state.customInput=null; render(); return;
   }
   if (hit("[data-cancel]")) { state.customInput=null; render(); return; }
-  if (hit("[data-refresh]")) {   // mock:短暂 loading 后回到 loaded
+  if (hit("[data-refresh]")) {   // mock: brief loading, then back to loaded
     state.fetch="loading"; render();
     setTimeout(()=>{ state.fetch="loaded"; render(); }, 900); return;
   }

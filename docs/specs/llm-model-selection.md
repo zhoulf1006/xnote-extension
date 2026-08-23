@@ -1,6 +1,6 @@
 # LLM Model Selection
 
-> 关联: [features](../features/llm-model-selection.md)
+> Related: [features](../features/llm-model-selection.md)
 
 ## Problem Statement
 
@@ -23,82 +23,82 @@ The LLM Provider Configuration modal gains per-provider **Chat model** and **Vis
 9. As a user with no API key configured, I want a clear hint that the list needs a key while manual entry still works, so that I'm never dead-ended.
 10. As a user whose fetch fails (network, expired key), I want to see what went wrong and still be able to select from a cached list or type manually, so that a fetch failure never blocks configuration.
 
-## 失败模式与边界
+## Failure Modes and Boundaries
 
-按用户操作序列穷举;每条含预期行为。
+Enumerated along real user action sequences; each item states the expected behaviour.
 
-**打开配置弹窗:**
+**Opening the config modal:**
 
-1. 未配 key 的 provider → 不自动拉取;信息提示「配置 key 才能加载列表,手输仍可用」;下拉仅含手输入口;当前已选值(如有)照常显示。刷新按钮保持可点:key 输入框中**刚输入、尚未保存**的 key 也可直接点刷新拉取;输入框为空时点刷新仅显示无 key 提示。
-2. 已配 key → 自动拉取;拉取期间下拉与刷新钮禁用、显示加载态;已有缓存列表时先显示缓存(stale-while-revalidate)。
-3. 拉取返回 401 → 红色错误提示指向 key 输入框;有缓存则列表退回缓存,无缓存则仅手输;不清除已存 key 与已选模型。
-4. 网络失败/超时(拉取 15 秒无响应即中止)/非 JSON/结构不符 → 警告提示;有缓存则显示缓存并标注拉取时间(相对时间),无缓存则仅手输。
-5. 拉取成功但过滤后为空(或 API 返回空列表)→ 复用「无 key」同款信息提示形态,文案改为「API 未返回可用模型,请手输」;仅手输。(该态与已确认原型中的 info 提示同构、仅文案不同,按纯文案豁免不另出原型。)
-6. Gemini 列表分页(默认每页 50)→ 请求最大页尺寸并跟随翻页标记取全量;不得只取首页当全集。
+1. Provider with no key configured → no automatic fetch; informational note "configure an API key to load the list, manual entry still works"; the dropdown offers only manual entry; any existing selection is still displayed. The refresh button stays clickable: a key **just typed and not yet saved** can be used to fetch immediately; with an empty field, refresh only shows the no-key note.
+2. Key configured → automatic fetch; during the fetch the selectors and refresh button are disabled and a loading state is shown; if a cached list exists it is displayed first (stale-while-revalidate).
+3. Fetch returns 401 → red error note pointing at the key field; with a cache the list falls back to it, without one only manual entry remains; neither the stored key nor the current selection is cleared.
+4. Network failure / timeout (aborted after 15 seconds without response) / non-JSON body / unexpected structure → warning note; with a cache, the cached list is shown along with its (relative) fetch time; without one, manual entry only.
+5. Fetch succeeds but the filtered result is empty (or the API returns an empty list) → the same informational note form as the no-key case, worded "the API returned no usable models, enter one manually"; manual entry only. (Structurally identical to the confirmed prototype's info note and differing only in wording, so it is exempt from a further prototype round as pure copy.)
+6. Gemini list pagination (50 per page by default) → request the maximum page size and follow the page token to collect everything; never treat the first page as the whole set.
 
-**选择与手输:**
+**Selecting and manual entry:**
 
-7. 已选模型不在本次拉取结果中(已下线/改名)→ 选中值仍显示在选择框;展开列表中无对应项、无勾选;不自动清除或替换用户的选择。
-8. 手输空串或纯空白 → 不生效;输入值先 trim。
-9. 手输的 ID 不做存在性校验(逃生口设计)——错误 ID 在真正调用时由既有 provider 错误路径报出。
-10. Vision 选择「Same as chat model」(默认)→ 图像分析解析为:vision 选择 → chat 选择 → provider 兜底默认,三级回退;回退到的模型不具备视觉能力时,由 provider 请求期错误路径报出。
-10a. Vision 下拉仅列判定为具备视觉能力的模型(list API 无能力元数据,按名称启发式判定:DeepSeek 取含 vision/vl 的 ID,OpenAI 取多模态家族前缀;Gemini 与 Customized 不过滤);手输任意 ID 不受此限。
-11. 列表项与选中值均为不受信文本(尤其 Customized 任意端点返回的 ID):一律按纯文本渲染,不解释 HTML;超长 ID 在列表内换行、在选择框内截断省略;不引入链接/脚本等新交互面。
-12. 超长列表(OpenAI 原始 ~70+,过滤后仍数十)→ 列表内部滚动,展开走文档流下推内容(弹窗是滚动容器,悬浮层会被裁——原型已验证该结论)。
+7. The selected model is absent from the latest fetch (retired or renamed) → the selection is still displayed in the selector; no matching row and no checkmark appear in the expanded list; the user's choice is never silently cleared or replaced.
+8. Empty or whitespace-only manual input → no effect; input is trimmed first.
+9. Manually entered IDs are not checked for existence (that is the point of the escape hatch) — a wrong ID surfaces through the provider's existing error path when actually used.
+10. Vision set to "Same as chat model" (the default) → image analysis resolves as vision selection → chat selection → provider fallback default, a three-level chain; if the resolved model has no vision capability, the provider's request-time error path reports it.
+10a. The vision dropdown lists only models judged vision-capable (the list APIs carry no capability metadata, so capability is inferred from naming: DeepSeek keeps IDs containing vision/vl, OpenAI keeps multimodal family prefixes; Gemini and Customized are not filtered); typing any ID by hand is not restricted.
+11. List entries and the selected value are untrusted text (especially IDs returned by an arbitrary Customized endpoint): always rendered as plain text with no HTML interpretation; over-long IDs wrap inside the list and are ellipsised in the selector; no links, scripts or other new interaction surfaces are introduced.
+12. Very long lists (OpenAI returns ~70+ raw, still dozens after filtering) → the list scrolls internally and expands within the document flow, pushing content down (the modal is a scroll container, so a floating layer would be clipped — confirmed by the prototype).
 
-**并发与竞态:**
+**Concurrency and races:**
 
-13. 拉取未返回时切换 provider 单选 → 迟到的响应不得写入当前 provider 的列表(以请求发起时的 provider 为准丢弃过期响应)。
-14. 加载中重复点刷新 → 刷新钮在加载期禁用,天然去重。
-15. 两台设备同时改选择 → 后写胜出(Chrome sync 语义),不做合并;可接受。
+13. Switching the provider radio while a fetch is outstanding → the late response must not populate the current provider's list (responses are discarded based on the provider at request time).
+14. Clicking refresh repeatedly while loading → the button is disabled during the fetch, which de-duplicates naturally.
+15. Two devices changing the selection at once → last write wins (Chrome sync semantics), no merging; acceptable.
 
-**保存与取消:**
+**Save and cancel:**
 
-16. Save → 选择写入同步存储;Cancel → 丢弃本次改动(弹窗下次打开时从存储重载,与既有 key 行为一致)。
-17. 列表缓存不随 Save/Cancel 变化——缓存归拉取动作管,选择归保存动作管。
+16. Save → selections are written to sync storage; Cancel → the round's changes are discarded (the modal reloads from storage next time it opens, matching existing key behaviour).
+17. The list cache is unaffected by Save/Cancel — the cache belongs to the fetch action, selections belong to the save action.
 
-**升级与既有数据回归:**
+**Upgrade and regression of existing data:**
 
-18. 老用户无任何已存选择 → 一切行为与现状逐字节一致(兜底默认=原硬编码值);不需要迁移。
-19. Customized 的既有配置结构(含 speech 能力)不变;fetch 助手只是往其模型输入框旁提供候选,不改变存量语义。
-20. 既有功能回归点:Chat、Summary、Translation、Capture(vision)全部经由同一模型解析链;Speech 仅 Customized 有,不受影响。
+18. An existing user with no stored selection → behaviour is byte-for-byte what it was (the fallback default equals the previously hardcoded value); no migration needed.
+19. The Customized provider's existing config structure (including the speech capability) is unchanged; the fetch assist only offers candidates beside its model fields and does not alter stored semantics.
+20. Existing-feature regression points: Chat, Summary, Translation and Capture (vision) all go through the same model resolution chain; Speech exists only for Customized and is unaffected.
 
-**存储与配额:**
+**Storage and quota:**
 
-21. 模型选择(小)入同步存储;拉取列表缓存(可能大)入本地存储——遵守「大数据不进 sync」的既有不变量。
-22. 缓存按 provider 键存,不按 key 键存;换账号后缓存可能属于旧账号,刷新即覆盖;可接受,不做失效逻辑。
+21. Model selections (small) go to sync storage; the fetched list cache (potentially large) goes to local storage — honouring the existing "large data never in sync" invariant.
+22. The cache is keyed by provider, not by API key; after switching accounts the cache may belong to the previous account, and one refresh overwrites it; acceptable, no invalidation logic.
 
-**开发模式:**
+**Development mode:**
 
-23. localhost 网页模式下拉取受 CORS 约束,被拦时走网络失败路径(第 4 条),手输兜底;不影响扩展模式。
+23. On localhost the fetch is subject to CORS; when blocked it takes the network-failure path (item 4) with manual entry as the fallback; extension mode is unaffected.
 
-**引入内容带来的能力(第二维):** 外部内容仅为 API 返回的模型 ID 字符串,渲染面已由第 11 条覆盖(纯文本、无链接/媒体/表单/脚本面);消毒与行为归宿在此重合,无额外交互面。
+**Capabilities introduced by rendered content (second dimension):** the only external content is model ID strings from the API, whose rendering surface is covered by item 11 (plain text, no link/media/form/script surface); sanitisation and behavioural destination coincide here, and no extra interaction surface exists.
 
 ## Implementation Decisions
 
-- **统一的请求时模型解析**:所有 provider 在每次请求时解析模型(vision→chat→兜底默认三级回退),不再在客户端创建时烘焙模型(Gemini 现状如此,需改为按当前选择取模型实例)。
-- **模型目录服务**(新模块,纯逻辑为主):按 provider 类型封装 list-models 的请求构造、响应解析、过滤、缓存读写。过滤规则:Gemini 以 supportedGenerationMethods 含 generateContent 为准并剥离名称前缀;OpenAI 用排除式启发(命中 embedding/tts/whisper/transcribe/dall-e/image/moderation/realtime/audio 任一子串即排除);DeepSeek 不过滤;Customized 从 `{baseURL}/models` 取、不过滤,baseURL 尾斜杠须归一化。
-- **注册表瘦身**:provider 注册表只保留每 provider 一个兜底默认模型;死配置(无消费者的 models 子对象、visionModel 引用及 supportsSpeech 标志)随本次重写删除(已核实全库无消费者)。
-- **存储契约**:每 provider 的 {chat, vision} 选择走既有同步存储路径;列表缓存(含拉取时间戳)走本地存储。vision 为空表示「Same as chat model」。
-- **UI 结论**(已经原型确认):既有弹窗内联扩展——provider 单选之下,key 行之后,依次 Chat model 行(带刷新图标钮)与 Vision model 行;**Vision 行仅对 supportsVision 的 provider 渲染**;选择框展开为文档流内列表(内部滚动,不悬浮),点击选择框外关闭;列表末尾固定「Enter custom model ID…」入口展开手输行;四种状态提示(加载/401/网络错误·缓存/未配 key)为行下条幅;Vision 首项为「Same as chat model」;行下有兜底默认提示行。图标沿用项目 Font Awesome 类。
-- **Customized**:能力区各模型输入升级为同款选择框,候选来自 fetch 助手;助手按钮位于 Base URL 之下。
+- **Uniform request-time model resolution**: every provider resolves its model on each request (vision → chat → fallback default), instead of baking the model in at client creation (which is what Gemini did and had to change to build the model instance from the current selection).
+- **Model catalog service** (new module, mostly pure logic): encapsulates request construction, response parsing, filtering and cache access per provider type. Filtering rules: Gemini keeps models whose supportedGenerationMethods include generateContent and strips the name prefix; OpenAI uses an exclusion heuristic (any of embedding/tts/whisper/transcribe/dall-e/image/moderation/realtime/audio in the ID); DeepSeek is unfiltered; Customized is read from `{baseURL}/models` unfiltered, with the base URL's trailing slashes normalised.
+- **Registry slimming**: the provider registry keeps exactly one fallback default model per provider; dead config (the unconsumed models sub-objects, the visionModel reference and the supportsSpeech flag) is deleted as part of this rewrite, after verifying repo-wide that nothing consumed them.
+- **Storage contract**: each provider's {chat, vision} selection uses the existing sync storage path; the list cache (with its fetch timestamp) uses local storage. An empty vision value means "Same as chat model".
+- **UI conclusions** (confirmed by prototype): an inline extension of the existing modal — below the provider radios and after the key row come the Chat model row (with a refresh icon button) and the Vision model row; **the Vision row renders only for providers with supportsVision**; the selector expands into an in-flow list (internally scrollable, not floating) and closes on an outside click; a pinned "Enter custom model ID…" entry at the end of the list opens the manual input row; four state notes (loading / 401 / network error with cache / no key) appear as a banner below the rows; the vision list's first entry is "Same as chat model"; a fallback-default hint line sits below. Icons reuse the project's Font Awesome classes.
+- **Customized**: each capability's model input becomes the same selector, with candidates supplied by the fetch assist; the assist button sits below the Base URL.
 
 ## Testing Decisions
 
-- **Seam**:模型目录服务的公开接口(本项目首个单测 seam,引入 Vitest,零配置贴合 Vite)。测外部行为:各 provider 响应夹具(取自真实 API 形状)→ 解析与过滤输出;三级回退解析;缓存读写与时间戳;分页聚合;过期响应丢弃;URL 归一化。不发真网络请求。
-- UI 与真实 API 联通性沿既有实践手测(开发模式 + 扩展模式),含配置弹窗各状态与 Save/Cancel 往返。
-- 既有先例:项目此前无自动化测试,`tests/` 仅手测页面——本次为测试基建首例。
+- **Seam**: the model catalog service's public interface (this project's first unit-test seam; Vitest introduced as the zero-config fit for Vite). Tests observe external behaviour: per-provider response fixtures (shaped from the real APIs) → parsing and filtering output; three-level resolution; cache read/write with timestamps; pagination aggregation; stale response discarding; URL normalisation. No real network requests.
+- UI behaviour and real API connectivity follow the project's existing practice of manual testing (development mode plus extension mode), covering each modal state and the Save/Cancel round trip.
+- Prior art: the project had no automated tests before this; `tests/` held only manual pages — this is the first test infrastructure.
 
 ## Out of Scope
 
-- 各功能(翻译/摘要/对话)分别指定模型——全局每 provider 一份选择。
-- 模型能力探测或选后校验(不发验证请求;错误在使用时暴露)。
-- 内置 provider 的 speech 能力(仅 Customized 保留)。
-- 温度、max_tokens 等推理参数配置。
-- provider 健康检查与自动降级。
-- 列表缓存的主动失效/按 key 隔离(见边界第 22 条)。
+- Per-feature model selection (translation / summary / chat) — one selection per provider applies globally.
+- Capability probing or post-selection validation (no verification request is sent; errors surface on use).
+- Speech capability for the built-in providers (only Customized retains it).
+- Inference parameters such as temperature and max_tokens.
+- Provider health checks and automatic failover.
+- Active cache invalidation or per-key cache isolation (see boundary item 22).
 
 ## Further Notes
 
-- OpenAI list-models 无能力元数据,排除式过滤必然有漏网——手输逃生口即为此而设,过滤宁松勿紧。
-- DeepSeek 文档当前示例已出现 v4 系模型,列表动态化正当其时。
+- OpenAI's list-models carries no capability metadata, so exclusion filtering will inevitably miss cases — the manual entry escape hatch exists for exactly that, and the filter errs on the permissive side.
+- DeepSeek's documented examples already show v4-series models, which is what makes a dynamic list timely.

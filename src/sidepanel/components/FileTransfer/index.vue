@@ -110,6 +110,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { confirmAction } from '@/sidepanel/composables/useConfirm';
+import { notify } from '@/sidepanel/composables/useToast';
 import { useFileTransferStore } from '@/stores/fileTransfer';
 import { useGoogleDriveStore } from '@/stores/googleDrive';
 import TransferInput from './TransferInput.vue';
@@ -161,7 +162,7 @@ const handleSendMessage = async (content) => {
     await store.sendMessage(content);
   } catch (error) {
     console.error('Failed to send message:', error);
-    alert('Failed to send message: ' + error.message);
+    notify.error('Failed to send message: ' + error.message);
   }
 };
 
@@ -170,7 +171,7 @@ const handleSendFile = async (file) => {
     await store.sendFile(file);
   } catch (error) {
     console.error('Failed to send file:', error);
-    alert('Failed to send file: ' + error.message);
+    notify.error('Failed to send file: ' + error.message);
   }
 };
 
@@ -179,7 +180,7 @@ const handleDownload = async (item) => {
     await store.downloadFile(item);
   } catch (error) {
     console.error('Failed to download file:', error);
-    alert('Failed to download file: ' + error.message);
+    notify.error('Failed to download file: ' + error.message);
   }
 };
 
@@ -192,7 +193,7 @@ const handleDelete = async (item) => {
     await store.deleteItem(item.id);
   } catch (error) {
     console.error('Failed to delete item:', error);
-    alert('Failed to delete: ' + error.message);
+    notify.error('Failed to delete: ' + error.message);
   }
 };
 
@@ -201,7 +202,7 @@ const handleCopy = async (item) => {
     await store.copyToClipboard(item);
   } catch (error) {
     console.error('Failed to copy:', error);
-    alert('Failed to copy to clipboard');
+    notify.error('Failed to copy to clipboard');
   }
 };
 
@@ -210,7 +211,7 @@ const handleCopyMessage = async (item) => {
     await navigator.clipboard.writeText(item.content);
   } catch (error) {
     console.error('Failed to copy:', error);
-    alert('Failed to copy to clipboard');
+    notify.error('Failed to copy to clipboard');
   }
 };
 

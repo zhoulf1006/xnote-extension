@@ -78,6 +78,7 @@
 
 <script setup>
 import { ref, computed, watch, nextTick, onMounted } from 'vue'
+import { notify } from '@/sidepanel/composables/useToast'
 import chatHistory from '@/stores/chatHistory'
 import ChatHistoryList from './ChatHistoryList.vue'
 import { useGoogleDrive } from '@/sidepanel/composables/useGoogleDrive'
@@ -135,7 +136,7 @@ const createNewChat = async () => {
     emit('new-chat', newChat)
   } catch (error) {
     console.error('Error creating new chat:', error)
-    alert('Failed to create new chat')
+    notify.error('Failed to create new chat')
   }
 }
 
@@ -152,7 +153,7 @@ const saveTitleEdit = async () => {
       showTitleEdit.value = false
     } catch (error) {
       console.error('Error updating title:', error)
-      alert('Failed to update title')
+      notify.error('Failed to update title')
     }
   }
 }

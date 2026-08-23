@@ -1,0 +1,289 @@
+<!doctype html>
+<!--
+  Prototype: side panel feedback layer (Direction A: floating toasts)
+  Question: replace every alert() (~34 sites) and the one prompt() — Chrome suppresses
+       native dialogs in extension side panels. Where do toasts sit, what do the three
+       severities look like, how do several stack, how does an over-long message wrap,
+       how is auto-dismiss distinguished from persistent, can a toast still be seen
+       while a modal is open, and what does the category picker replacing prompt()
+       look like?
+  Context shell: the XNote side panel (48px rail + content area) is a simplified mock
+       that only supplies judging context; it is not the subject being judged.
+  Why one page: toasts and the picker are both part of the feedback layer that overlays
+       the same narrow panel, so their visual relationship to the panel and to the
+       existing modal has to be judged together.
+  Demo harness (data-demo-harness, NOT part of the design, do not implement):
+       the floating dark pill triggers each kind of message, switches panel width, and
+       opens the config modal; in the real app these are driven by the success/failure
+       of features and by the right-click menu, and no such buttons exist.
+  Icon note: this page inlines stroke icons; the implementation reuses the project's
+       Font Awesome classes (fa-circle-check / fa-triangle-exclamation / fa-circle-info /
+       fa-xmark / fa-folder).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Prototype — side panel feedback layer (toasts + category picker)</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #e9e6f0; font-family: -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .stage { display: flex; justify-content: center; padding: 20px 0 120px; }
+
+  /* ===== Side panel shell (context mock, not judged) ===== */
+  .panel { width: 420px; height: 560px; background: #f8f9fa; display: flex; box-shadow: 0 4px 24px rgba(0,0,0,.18); position: relative; overflow: hidden; }
+  .rail { width: 48px; background: rgba(103,58,183,.15); display: flex; flex-direction: column; align-items: center; padding: 8px 0; gap: 4px; flex: none; }
+  .rail .ric { width: 48px; height: 48px; display: grid; place-items: center; color: rgba(0,0,0,.8); }
+  .rail .ric.active { background: rgba(156,130,202,.85); color: #fff; }
+  .rail .spacer { flex: 1; }
+  .content-mock { flex: 1; background: #fff; padding: 14px; overflow-y: auto; }
+  .content-mock h2 { font-size: 15px; margin: 0 0 4px; color: #333; }
+  .content-mock p.sub { font-size: 12px; color: #888; margin: 0 0 14px; }
+  .card-mock { border: 1px solid #eceef1; border-radius: 6px; padding: 10px; margin-bottom: 8px; }
+  .card-mock .t { font-size: 13px; color: #333; margin-bottom: 6px; }
+  .mock-line { height: 9px; border-radius: 5px; background: #eceef1; margin: 7px 0; }
+  .w80 { width: 80%; } .w60 { width: 60%; } .w40 { width: 40%; }
+
+  /* ===== Toasts (first subject being judged) =====
+     Sit at the panel bottom above the content; they take no layout space and never push
+     content down (layout shift is too costly in a panel this narrow). Stretched with
+     left/right positioning rather than a transform. */
+  .toast-layer {
+    position: absolute; left: 0; right: 0; bottom: 0;
+    padding: 0 12px 12px 12px;
+    display: flex; flex-direction: column; gap: 8px;
+    z-index: 1200;               /* above the config modal (1000): errors raised inside it must stay visible */
+    pointer-events: none;         /* empty space stays click-through */
+  }
+  .toast {
+    pointer-events: auto;
+    display: flex; align-items: flex-start; gap: 8px;
+    padding: 10px 10px 10px 12px;
+    border-radius: 6px;
+    font-size: 12.5px; line-height: 1.45;
+    box-shadow: 0 4px 14px rgba(0,0,0,.16);
+    border: 1px solid transparent;
+    animation: toast-in .18s ease-out;
+  }
+  @keyframes toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .toast .ico { flex: none; margin-top: 1px; }
+  .toast .msg { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+  .toast .close {
+    flex: none; width: 20px; height: 20px; display: grid; place-items: center;
+    border: none; background: transparent; color: currentColor; opacity: .55;
+    border-radius: 4px; cursor: pointer; padding: 0;
+  }
+  .toast .close:hover { opacity: 1; background: rgba(0,0,0,.07); }
+
+  /* Three severities, reusing the same semantic colours as the existing state notes */
+  .toast.success { background: #e8f5e8; color: #2e7d32; border-color: #c8e6c9; }
+  .toast.error   { background: #ffeaea; color: #c62828; border-color: #ffcdd2; }
+  .toast.info    { background: #f0f8ff; color: #1565c0; border-color: #cfe5fb; }
+
+  /* Auto-dismissing toasts show a countdown bar; persistent ones (errors) do not */
+  .toast .timer { position: absolute; left: 0; bottom: 0; height: 2px; background: currentColor; opacity: .35; border-radius: 0 0 6px 6px; animation: timer 4s linear forwards; }
+  .toast { position: relative; overflow: hidden; }
+  @keyframes timer { from { width: 100%; } to { width: 0%; } }
+
+  /* ===== Category picker (second subject, replacing prompt()) ===== */
+  .picker-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1100; }
+  .picker { background: #fff; border-radius: 8px; width: calc(100% - 40px); max-width: 340px; max-height: calc(100% - 60px); display: flex; flex-direction: column; box-shadow: 0 4px 16px rgba(0,0,0,.1); overflow: hidden; }
+  .picker h3 { margin: 0; padding: 14px 16px 10px; font-size: 14px; color: #333; }
+  .picker .page-line { padding: 0 16px 10px; font-size: 12px; color: #888; display: flex; align-items: center; gap: 6px; }
+  .picker .page-line .ttl { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #555; }
+  .picker .list { padding: 4px 8px; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+  .picker .opt {
+    display: flex; align-items: center; gap: 8px;
+    padding: 9px 10px; border-radius: 4px; font-size: 13px; color: #333; cursor: pointer;
+  }
+  .picker .opt .count { margin-left: auto; font-size: 11px; color: #999; }
+  .picker .opt:hover { background: rgba(103,58,183,.07); }
+  .picker .opt.selected { background: rgba(103,58,183,.16); }  /* One shade deeper than hover, declared later so it wins */
+  .picker .opt i { color: #673ab7; }
+  .picker .actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid #eee; }
+  .picker .actions button { padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid #dee2e6; }
+  .picker .cancel { background: #fff; color: #495057; }
+  .picker .cancel:hover { background: #f8f9fa; }
+  .picker .save { background: #ba92ff; border-color: #ba92ff; color: #fff; }
+  .picker .save:hover { background: #a36dff; }
+  .picker .save:disabled { opacity: .5; cursor: default; }
+
+  /* ===== Existing LLM config modal (context mock, used to check toast layering) ===== */
+  .cfg-overlay { position: absolute; inset: 0; background: rgba(0,0,0,.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+  .cfg { background: #fff; border-radius: 8px; width: calc(100% - 32px); max-width: 400px; padding: 20px; box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+  .cfg h2 { font-size: 16px; margin: 0 0 14px; color: #333; }
+  .cfg .row { border: 1px solid #dee2e6; border-radius: 6px; padding: 10px 12px; font-size: 14px; color: #495057; margin-bottom: 8px; }
+  .cfg .row.sel { background: rgba(103,58,183,.1); border-color: #673ab7; }
+  .cfg .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
+  .cfg .acts button { padding: 8px 16px; border-radius: 4px; font-size: 14px; cursor: pointer; border: 1px solid #dee2e6; }
+  .cfg .acts .save { background: #ba92ff; border-color: #ba92ff; color: #fff; }
+
+  /* ===== Demo harness (separate floating layer, not design) ===== */
+  [data-demo-harness] {
+    position: fixed; left: 0; right: 0; bottom: 16px; margin: 0 auto; width: max-content;
+    max-width: calc(100vw - 24px); background: #23212e; color: #cfc9e0; border-radius: 999px;
+    display: flex; align-items: center; gap: 10px; padding: 8px 16px; font-size: 12px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.35); z-index: 9999; flex-wrap: wrap; justify-content: center;
+  }
+  [data-demo-harness] .sep { width: 1px; height: 18px; background: #4a4560; }
+  [data-demo-harness] .hbtn { border: 1px solid #4a4560; background: transparent; color: #cfc9e0; border-radius: 999px; padding: 3px 10px; font-size: 11.5px; cursor: pointer; }
+  [data-demo-harness] .hbtn:hover { background: #35304a; }
+  [data-demo-harness] .hbtn.on { background: #6e5aa8; border-color: #6e5aa8; color: #fff; }
+  [data-demo-harness] .lbl { opacity: .65; }
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="panel" id="panel">
+    <div class="rail">
+      <div class="ric" title="Chat"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
+      <div class="ric" title="Capture"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg></div>
+      <div class="ric active" title="Quick Links"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+      <div class="ric" title="Transfer"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3l4 4-4 4M21 7H7M7 21l-4-4 4-4M3 17h14"/></svg></div>
+      <div class="spacer"></div>
+      <div class="ric" title="LLM Config"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+    </div>
+
+    <div class="content-mock">
+      <h2>Quick Links</h2>
+      <p class="sub">context mock, not the subject being judged</p>
+      <div class="card-mock"><div class="t">Deep Security</div><div class="mock-line w80"></div><div class="mock-line w60"></div></div>
+      <div class="card-mock"><div class="t">DeepLearning</div><div class="mock-line w60"></div><div class="mock-line w40"></div></div>
+      <div class="card-mock"><div class="t">Research</div><div class="mock-line w80"></div><div class="mock-line w40"></div></div>
+    </div>
+
+    <!-- Existing config modal, used to check layering -->
+    <div class="cfg-overlay" id="cfg" style="display:none">
+      <div class="cfg">
+        <h2>LLM Provider Configuration</h2>
+        <div class="row">OpenAI</div>
+        <div class="row sel">DeepSeek</div>
+        <div class="row">Gemini</div>
+        <div class="acts"><button>Cancel</button><button class="save">Save</button></div>
+      </div>
+    </div>
+
+    <!-- Category picker, replacing prompt() -->
+    <div class="picker-overlay" id="picker" style="display:none">
+      <div class="picker">
+        <h3>Save to Quick Links</h3>
+        <div class="page-line">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+          <span class="ttl" id="picker-title">Trend Micro Deep Security 20 Administration Guide</span>
+        </div>
+        <div class="list" id="picker-list"></div>
+        <div class="actions">
+          <button class="cancel" onclick="closePicker()">Cancel</button>
+          <button class="save" id="picker-save" disabled onclick="savePicked()">Save</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Toast layer -->
+    <div class="toast-layer" id="toasts"></div>
+  </div>
+</div>
+
+<!-- Demo harness: not part of the design, do not implement -->
+<div data-demo-harness>
+  <span class="lbl">demo · toasts</span>
+  <button class="hbtn" onclick="toast('success','Summary saved to Google Drive: Technology &gt; AI Research')">success</button>
+  <button class="hbtn" onclick="toast('error','Failed to send file: network request timed out after 15 seconds')">error</button>
+  <button class="hbtn" onclick="toast('info','Please navigate to the original webpage to regenerate the summary')">info</button>
+  <button class="hbtn" onclick="toast('error','Error changing storage location: The user aborted a request because the selected folder no longer exists in Google Drive and could not be recreated automatically')">long error</button>
+  <button class="hbtn" onclick="burst()">burst 3</button>
+  <div class="sep"></div>
+  <span class="lbl">demo · picker</span>
+  <button class="hbtn" onclick="openPicker()">category picker</button>
+  <div class="sep"></div>
+  <span class="lbl">demo · config modal</span>
+  <button class="hbtn" id="cfgBtn" onclick="toggleCfg()">open</button>
+  <div class="sep"></div>
+  <span class="lbl">demo · width</span>
+  <button class="hbtn" onclick="setW(360,this)">360</button>
+  <button class="hbtn on" onclick="setW(420,this)">420</button>
+  <button class="hbtn" onclick="setW(480,this)">480</button>
+</div>
+
+<script>
+const ICONS = {
+  success: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M8 12l3 3 5-6"/></svg>',
+  error: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>',
+  info: '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>'
+};
+const CLOSE = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>';
+const MAX_VISIBLE = 3;
+
+function toast(kind, msg) {
+  const layer = document.getElementById('toasts');
+  const el = document.createElement('div');
+  el.className = 'toast ' + kind;
+  // Errors persist (they must be read and dismissed); success/info clear after 4s
+  const persistent = kind === 'error';
+  el.innerHTML = `<span class="ico">${ICONS[kind]}</span><span class="msg">${msg}</span>` +
+    (persistent ? `<button class="close" title="Dismiss">${CLOSE}</button>` : `<div class="timer"></div>`);
+  layer.appendChild(el);
+  // Once the visible cap is reached, the oldest leaves first
+  while (layer.children.length > MAX_VISIBLE) layer.firstElementChild.remove();
+  if (persistent) el.querySelector('.close').onclick = () => el.remove();
+  else setTimeout(() => el.remove(), 4000);
+}
+
+function burst() {
+  toast('success', 'Link added to Deep Security');
+  setTimeout(() => toast('info', 'Sync started for 3 chats'), 220);
+  setTimeout(() => toast('error', 'Failed to copy to clipboard'), 440);
+}
+
+/* Category picker */
+const CATEGORIES = [
+  { name: 'Deep Security', count: 8 },
+  { name: 'DeepLearning', count: 3 },
+  { name: 'Research', count: 12 },
+  { name: 'Vendor Documentation & Release Notes', count: 1 },
+  { name: 'Reading later', count: 0 }
+];
+let picked = null;
+function openPicker() {
+  picked = null;
+  const list = document.getElementById('picker-list');
+  list.innerHTML = CATEGORIES.map((c, i) =>
+    `<div class="opt" data-i="${i}" onclick="pick(${i})">
+       <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+       <span>${c.name}</span><span class="count">${c.count}</span>
+     </div>`).join('');
+  document.getElementById('picker-save').disabled = true;
+  document.getElementById('picker').style.display = 'flex';
+}
+function pick(i) {
+  picked = i;
+  [...document.querySelectorAll('.picker .opt')].forEach(o => o.classList.toggle('selected', +o.dataset.i === i));
+  document.getElementById('picker-save').disabled = false;
+}
+function closePicker() { document.getElementById('picker').style.display = 'none'; }
+function savePicked() {
+  const name = CATEGORIES[picked].name;
+  closePicker();
+  toast('success', `Saved to ${name}`);
+}
+
+function toggleCfg() {
+  const cfg = document.getElementById('cfg');
+  const open = cfg.style.display === 'none';
+  cfg.style.display = open ? 'flex' : 'none';
+  const b = document.getElementById('cfgBtn');
+  b.textContent = open ? 'close' : 'open';
+  b.classList.toggle('on', open);
+  if (open) toast('error', 'There was a problem saving your API keys. Please try again.');
+}
+
+function setW(w, btn) {
+  document.getElementById('panel').style.width = w + 'px';
+  [...btn.parentElement.querySelectorAll('.hbtn')].slice(-3).forEach(b => b.classList.remove('on'));
+  btn.classList.add('on');
+}
+
+// Show one on load so the page is not empty
+toast('success', 'Summary saved to Google Drive: Technology &gt; AI Research');
+</script>
+</body>
+</html>

@@ -1,30 +1,30 @@
 /**
- * Simple notification utility for consistent user feedback
- * Can be replaced with a toast library in the future
+ * Notification utility — routes to the in-app toast layer.
+ *
+ * Previously this only reached the user for 'error' (via alert(), which Chrome
+ * suppresses in extension side panels); everything else went to the console
+ * alone. All severities are now visible.
  */
+import { notify } from '../composables/useToast';
 
 export function showNotification(message, type = 'info') {
-  // For now, use console and alert for critical messages
-  // This can be replaced with a proper toast/notification system later
-
-  switch(type) {
+  switch (type) {
     case 'error':
       console.error('[Notification]', message);
-      // Only alert for errors to avoid being too intrusive
-      alert(`Error: ${message}`);
+      notify.error(message);
       break;
     case 'warning':
       console.warn('[Notification]', message);
+      notify.warning(message);
       break;
     case 'success':
       console.log('[Notification]', message);
+      notify.success(message);
       break;
     case 'info':
     default:
       console.info('[Notification]', message);
+      notify.info(message);
       break;
   }
-
-  // TODO: In the future, integrate with a proper notification system
-  // For example: Vue Toastification, Element Plus notifications, etc.
 }

@@ -1,14 +1,15 @@
-# Specs 索引
+# Specs
 
-功能需求全景(用户故事、失败模式与边界穷举、测试决策、明确不做)。读者是要改这块代码的人。
-一个功能模块一篇,slug 与 `docs/features/` 一一对应;现行描述、就地改写,变更史在 git;功能移除即删文件。
+Full requirement picture per feature: user stories, exhaustive failure modes and boundaries, testing decisions, and what is explicitly not being built. Written for whoever has to change this code next.
 
-## 不变量
+One document per feature module, with the slug matching `docs/features/`. Describes the current state and is rewritten in place; change history lives in git; a removed feature means a deleted file.
 
-- spec 不引用票号、分支名、施工记录路径——它先于且长于这些临时物。
-- 决策取舍归 ADR(如有),spec 只引用编号;当前项目行为归 features。
-- 尚未落地的事实写 `> Pending: <可判真假的产品条件>`,收口时逐条重判。
+## Invariants
 
-## 索引
+- A spec never references ticket numbers, branch names, or working-record paths — it exists before those and outlives them.
+- Design trade-offs belong in ADRs (referenced by number, not restated); current product behaviour belongs in `docs/features/`.
+- Facts that are not yet true are marked `> Pending: <condition that can be judged against the implementation>`, and are re-judged at the end of every round.
 
-- [llm-model-selection](./llm-model-selection.md) — LLM Config 弹窗内按 provider 动态拉取并选择 Chat/Vision 模型
+## Index
+
+- [llm-model-selection](./llm-model-selection.md) — fetching model lists per provider and choosing chat/vision models in the LLM Config dialog

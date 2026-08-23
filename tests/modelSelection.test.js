@@ -1,6 +1,6 @@
 /**
  * Model selection storage + resolution chain.
- * Coverage source: docs/specs/llm-model-selection.md「失败模式与边界」#8, #10, #16, #18.
+ * Coverage source: docs/specs/llm-model-selection.md, Failure Modes and Boundaries #8, #10, #16, #18.
  */
 import { describe, test, expect } from 'vitest';
 import { resolveModel, sanitizeModelInput, createSelectionStore } from '../src/api/modelSelection.js';
