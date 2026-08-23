@@ -5,6 +5,7 @@
 
 import { ref, reactive, nextTick, onMounted, computed } from 'vue'
 import quickLinksService from './quickLinksService.js'
+import { confirmAction } from '../../composables/useConfirm.js'
 
 export function useQuickLinks() {
   // Data refs
@@ -140,22 +141,7 @@ export function useQuickLinks() {
     editingCategoryName.value = ''
   }
 
-  // In-app confirmation state: window.confirm() is suppressed in Chrome
-  // extension side panels (returns false without showing a dialog), so
-  // destructive actions confirm through ConfirmDialog instead.
-  const pendingConfirm = ref(null) // { message, action: async () => {} }
-
-  const confirmPending = async () => {
-    const pending = pendingConfirm.value
-    pendingConfirm.value = null
-    if (pending) await pending.action()
-  }
-
-  const cancelPending = () => {
-    pendingConfirm.value = null
-  }
-
-  const deleteCategory = (categoryName) => {
+  const deleteCategory = async (categoryName) => {
     // Deleting a category removes its links too, so name the cost in the prompt
     const linkCount = quickLinksData.value?.models
       ?.find(model => model.name === categoryName)?.links?.length || 0
@@ -163,17 +149,14 @@ export function useQuickLinks() {
       ? `Delete the category "${categoryName}" and the ${linkCount} link${linkCount === 1 ? '' : 's'} inside it?`
       : `Are you sure you want to delete the category "${categoryName}"?`
 
-    pendingConfirm.value = {
-      message,
-      action: async () => {
-        try {
-          await quickLinksService.deleteCategory(categoryName)
-          await loadQuickLinks()
-          error.value = null
-        } catch (err) {
-          error.value = quickLinksService.formatError(err)
-        }
-      }
+    if (!(await confirmAction(message))) return
+
+    try {
+      await quickLinksService.deleteCategory(categoryName)
+      await loadQuickLinks()
+      error.value = null
+    } catch (err) {
+      error.value = quickLinksService.formatError(err)
     }
   }
 
@@ -237,18 +220,15 @@ export function useQuickLinks() {
     editingLinkData.url = ''
   }
 
-  const deleteLink = (categoryName, linkUrl) => {
-    pendingConfirm.value = {
-      message: 'Are you sure you want to delete this link?',
-      action: async () => {
-        try {
-          await quickLinksService.deleteLink(categoryName, linkUrl)
-          await loadQuickLinks()
-          error.value = null
-        } catch (err) {
-          error.value = quickLinksService.formatError(err)
-        }
-      }
+  const deleteLink = async (categoryName, linkUrl) => {
+    if (!(await confirmAction('Are you sure you want to delete this link?'))) return
+
+    try {
+      await quickLinksService.deleteLink(categoryName, linkUrl)
+      await loadQuickLinks()
+      error.value = null
+    } catch (err) {
+      error.value = quickLinksService.formatError(err)
     }
   }
 
@@ -622,9 +602,6 @@ export function useQuickLinks() {
     saveCategory,
     cancelEditCategory,
     deleteCategory,
-    pendingConfirm,
-    confirmPending,
-    cancelPending,
 
     // Link Methods
     addLink,

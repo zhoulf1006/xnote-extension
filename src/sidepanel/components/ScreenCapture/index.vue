@@ -117,6 +117,7 @@ import { useLLMConfigStore } from '@/stores/llmConfig';
 import { llmService } from '@/api/llm';
 import { llmProviders } from '@/config/llmProviders';
 import { resolveModelFor } from '@/api/modelConfigService';
+import { confirmAction } from '@/sidepanel/composables/useConfirm';
 import screenshotService from '@/api/screenshotService';
 import CaptureControls from './CaptureControls.vue';
 import ImagePreview from './ImagePreview.vue';
@@ -438,7 +439,7 @@ function clearResults() {
 }
 
 async function clearHistory() {
-  if (confirm('Clear all capture history?')) {
+  if (await confirmAction('Clear all capture history?', 'Clear')) {
     captureHistory.value = [];
     await screenshotService.clearHistory();
   }

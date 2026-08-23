@@ -109,6 +109,7 @@
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
+import { confirmAction } from '@/sidepanel/composables/useConfirm';
 import { useFileTransferStore } from '@/stores/fileTransfer';
 import { useGoogleDriveStore } from '@/stores/googleDrive';
 import TransferInput from './TransferInput.vue';
@@ -183,7 +184,7 @@ const handleDownload = async (item) => {
 };
 
 const handleDelete = async (item) => {
-  if (!confirm(`Delete this ${item.type === 'text' ? 'message' : 'file'}?`)) {
+  if (!(await confirmAction(`Delete this ${item.type === 'text' ? 'message' : 'file'}?`))) {
     return;
   }
 
