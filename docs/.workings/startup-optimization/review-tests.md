@@ -150,3 +150,45 @@ Both named their module in the failure. Restored with a precise inverse edit; 43
 Note for whoever extends this file: the mutation had to be placed in a **constructor**. Putting it in
 a method would not have turned anything red, because only construction runs at import — and a
 mutation that cannot reach the tested path proves nothing.
+
+---
+
+# review-tests — #14 migration markers
+
+## Dimension 1: coverage — every ticket criterion has a case, except one measured by evidence
+
+Five cases added: repeat startup does no per-key traffic; a never-migrated user still migrates; a
+failed copy is retried rather than marked; the encryption migration skips when marked; and it stays
+unmarked when it could not encrypt. The round-trip criterion is **evidence**, not a case — measured
+before and after through the counting backend and re-confirmed in the running app.
+
+Declared gap: `migrateToEncrypted`'s *successful* path is still uncovered, because encryption cannot
+initialise in this environment — the device key needs browser fingerprinting globals. What is covered
+is the marker behaviour on both sides of it. Extension-mode verification belongs to the closeout.
+
+## Dimension 2: case design — one refinement worth recording
+
+An existing case, "writes nothing to local storage when sync holds nothing to migrate", **legitimately
+broke** when the marker was introduced: the marker is itself a local write, so a write-count assertion
+was no longer the right contract. It was rewritten to assert that no *mapping key* was written, by
+counting keys present in the result rather than comparing objects — a key set to `undefined` compares
+equal to an absent one, so a contents comparison could not tell a spurious write from no write.
+
+This is a contract refinement, not a weakening: the new assertion still fails on a spurious mapping
+write, which is what the case was protecting.
+
+## Dimension 3: false passes — both never-red cases mutation-verified
+
+The two encryption-marker cases were green on their first run, because the implementation was written
+before them — a discipline lapse, recorded rather than hidden. Both were therefore mutated:
+
+- **Marker check removed** from `migrateToEncrypted` → "a marked run returns immediately" failed with
+  `expected undefined to be true`. Only that case failed.
+- **Marks done even when encryption was unavailable** → "a run that could not encrypt is not marked"
+  failed with `expected true to be undefined`. Only that case failed.
+
+Both failures landed on the mutated behaviour, and both were restored with precise inverse edits.
+
+The three `migrateSyncToLocalStorage` cases were red first, for the right reasons: the repeat-startup
+case reported `expected 8 to be 4` (the re-run), and the retry case reported
+`expected undefined to deeply equal { a: 1 }` — the stranded-data defect itself.

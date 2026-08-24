@@ -6,6 +6,14 @@
 import encryptionService, { EncryptionService } from './encryptionService.js'
 import { chromeStorageBackend } from './storageBackend.js'
 
+// Set once the sync-to-local migration has fully completed, so it stops re-reading and
+// re-deleting four keys on every panel open — including the writes, which consume the
+// hourly sync write quota for keys that no longer exist.
+const SYNC_TO_LOCAL_MIGRATION_MARKER = 'storage_migration_sync_to_local_v1'
+
+// Same purpose for the plain-text-to-encrypted migration of the sensitive keys.
+const ENCRYPTION_MIGRATION_MARKER = 'storage_migration_encryption_v1'
+
 // Constants
 export const STORAGE_KEYS = {
   OPENAI_API_KEY: 'openai_api_key',  // Official OpenAI API
@@ -656,8 +664,19 @@ class SecureStorageService {
   /**
    * Migrate existing plain text values to encrypted format
    */
-  async migrateToEncrypted() {
+  async migrateToEncrypted(backend = chromeStorageBackend) {
+    // Checked before anything else, so a completed migration costs one lookup instead
+    // of a read per sensitive key on every panel open.
+    if (backend.isAvailable()) {
+      const marker = await backend.localGet([ENCRYPTION_MIGRATION_MARKER])
+      if (marker[ENCRYPTION_MIGRATION_MARKER]) {
+        return { migrated: 0, errors: [], skipped: true }
+      }
+    }
+
     if (!this.encryptionEnabled) {
+      // Deliberately unmarked: encryption may become available later, and the values
+      // stored plain in the meantime still need migrating when it does.
       console.log('Encryption not available, skipping migration')
       return { migrated: 0, errors: [] }
     }
@@ -668,21 +687,16 @@ class SecureStorageService {
 
     console.log('🔄 Starting migration to encrypted storage...')
 
-    // Migrate all sensitive keys
     for (const [keyName, storageKey] of Object.entries(STORAGE_KEYS)) {
       if (!this.isSensitiveKey(storageKey)) continue
 
       try {
-        // Get current value using basic storage
-        const currentValue = await getStoredValue(storageKey)
+        const currentValue = await getStoredValue(storageKey, undefined, backend)
 
         if (currentValue && !encryptionService.isEncryptedFormat(currentValue)) {
           console.log(`🔄 Migrating ${keyName} to encrypted format`)
-
-          // Encrypt and store
           const encryptedValue = await encryptionService.encrypt(currentValue)
-          await storeValue(storageKey, encryptedValue)
-
+          await storeValue(storageKey, encryptedValue, backend)
           results.migrated++
           console.log(`✅ Migrated ${keyName}`)
         }
@@ -690,6 +704,11 @@ class SecureStorageService {
         console.error(`❌ Failed to migrate ${keyName}:`, error)
         results.errors.push({ key: keyName, error: error.message })
       }
+    }
+
+    // Only a clean run is recorded as done, so a key that failed is retried later
+    if (results.errors.length === 0 && backend.isAvailable()) {
+      await backend.localSet({ [ENCRYPTION_MIGRATION_MARKER]: true })
     }
 
     console.log(`🎉 Migration complete: ${results.migrated} keys migrated, ${results.errors.length} errors`)
@@ -870,6 +889,13 @@ export async function migrateSyncToLocalStorage(backend = chromeStorageBackend) 
     return;
   }
 
+  // Kept in local storage, not sync: the marker is per-device, which is the correct
+  // scope (each device migrates its own copy), and it costs no sync write quota.
+  const marker = await backend.localGet([SYNC_TO_LOCAL_MIGRATION_MARKER]);
+  if (marker[SYNC_TO_LOCAL_MIGRATION_MARKER]) {
+    return;
+  }
+
   const keysToMigrate = [
     'drive_location_mappings',
     STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS,
@@ -879,6 +905,8 @@ export async function migrateSyncToLocalStorage(backend = chromeStorageBackend) 
 
   console.log('Checking for data to migrate from sync to local storage...');
 
+  let allKeysSettled = true;
+
   for (const key of keysToMigrate) {
     let syncValue;
     try {
@@ -886,31 +914,40 @@ export async function migrateSyncToLocalStorage(backend = chromeStorageBackend) 
       syncValue = result[key];
     } catch (readError) {
       console.warn(`Could not read ${key} from sync storage:`, readError);
+      // Unread is not the same as absent: leave it be and retry on a later startup
+      allKeysSettled = false;
+      continue;
     }
 
-    if (syncValue !== undefined && syncValue !== null) {
-      const hasData = typeof syncValue === 'object'
-        ? Object.keys(syncValue).length > 0
-        : Boolean(syncValue);
+    const hasData = syncValue !== undefined && syncValue !== null &&
+      (typeof syncValue === 'object' ? Object.keys(syncValue).length > 0 : Boolean(syncValue));
 
-      if (hasData) {
-        try {
-          await backend.localSet({ [key]: syncValue });
-          console.log(`Migrated ${key} from sync to local storage`);
-        } catch (storeError) {
-          console.warn(`Failed to store ${key} in local storage:`, storeError);
-        }
+    if (hasData) {
+      try {
+        await backend.localSet({ [key]: syncValue });
+        console.log(`Migrated ${key} from sync to local storage`);
+      } catch (storeError) {
+        // The copy failed, so the source must survive — removing it here would
+        // destroy the only remaining copy and leave nothing for the retry to move.
+        console.warn(`Failed to store ${key} in local storage, leaving it in sync:`, storeError);
+        allKeysSettled = false;
+        continue;
       }
     }
 
-    // Always remove from sync to free quota, even if the read or the store failed
+    // Safe now: either the data is copied, or there was none to copy
     try {
       await backend.syncRemove(key);
-      console.log(`✅ Removed ${key} from sync storage`);
     } catch (removeError) {
       console.warn(`Could not remove ${key} from sync storage:`, removeError);
+      allKeysSettled = false;
     }
   }
 
-  console.log('Migration check completed');
+  if (allKeysSettled) {
+    await backend.localSet({ [SYNC_TO_LOCAL_MIGRATION_MARKER]: true });
+    console.log('Migration check completed');
+  } else {
+    console.log('Migration incomplete, will retry on a later startup');
+  }
 } 
