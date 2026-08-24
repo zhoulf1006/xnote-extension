@@ -107,15 +107,6 @@ describe('storage primitives with an injected backend', () => {
   });
 });
 
-describe('checkStorage with an injected backend', () => {
-  test('reports the backend as the active storage and reads what it holds', async () => {
-    const backend = createMemoryBackend({ sync: { alpha: 'one', beta: 'two' } });
-    const status = await checkStorage(backend);
-    expect(status.isExtensionMode).toBe(true);
-    expect(backend.calls.syncGet).toBeGreaterThan(0);
-  });
-});
-
 describe('startup sequence preserves mapping data while freeing sync quota', () => {
   // Sourced from production rather than retyped: a rename there must break this
   // test loudly instead of quietly making it seed keys nothing looks at.
@@ -229,5 +220,31 @@ describe('the encryption migration also stops re-running once complete', () => {
 
     const marker = await backend.localGet(['storage_migration_encryption_v1']);
     expect(marker.storage_migration_encryption_v1).toBeUndefined();
+  });
+});
+
+describe('storage diagnostics are opt-in', () => {
+  test('with the switch off, nothing reads the whole store', async () => {
+    const backend = createMemoryBackend({ sync: { openai_api_key: 'x', other: 'y' } });
+
+    const status = await checkStorage(backend);
+
+    // Reading the entire sync area just to print it is the cost being removed
+    expect(backend.calls.syncGet).toBe(0);
+    // The status callers log must still be produced
+    expect(status.isExtensionMode).toBe(true);
+    expect(status).toHaveProperty('hasExtensionURL');
+    expect(status).toHaveProperty('devStorage');
+  });
+
+  test('with the switch on, it still reports what it used to', async () => {
+    const backend = createMemoryBackend({ sync: { openai_api_key: 'x' } });
+
+    const status = await checkStorage(backend, { verbose: true });
+
+    expect(backend.calls.syncGet).toBeGreaterThan(0);
+    expect(status.isExtensionMode).toBe(true);
+    expect(status).toHaveProperty('hasExtensionURL');
+    expect(status).toHaveProperty('devStorage');
   });
 });

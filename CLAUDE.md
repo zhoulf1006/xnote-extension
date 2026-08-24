@@ -70,6 +70,18 @@ make dev-pack     # Build + zip with the dev manifest (keeps the `key` field)
 - Verify context menus, encrypted storage, and Drive sync in extension mode — none of these exist in dev mode.
 - Create test files or scripts under the `tests/` folder.
 
+### Debugging storage
+
+`checkStorage()` normally prints only a short summary. To make it dump the full contents of sync and
+local storage, set the flag in the panel's console and reload:
+
+```js
+localStorage.setItem('xnote-debug-storage', 'true')   // 'false' or removing it turns it back off
+```
+
+It is off by default because dumping the store means reading all of it on every panel open, purely to
+log it.
+
 ## File Structure Reference
 
 - `src/api/`: services (LLM, Google Drive, transfer, storage/encryption, screenshot, links)

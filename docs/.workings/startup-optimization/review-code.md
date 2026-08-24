@@ -239,3 +239,47 @@ No key material is logged or persisted differently.
    are internal bookkeeping, not user configuration, and putting them in `STORAGE_KEYS` would sweep
    them into `checkStorage`'s dump and the sensitive-key iteration. Worth revisiting only if a third
    marker appears.
+
+---
+
+# review-code — #16 opt-in storage diagnostics
+
+Change surface: `storageService.js` (`checkStorage`, new `isStorageDebugEnabled`, flag constant),
+`CLAUDE.md` (the switch documented), `tests/storageBackend.test.js` (two cases added, one retired).
+
+## [1] Underlying premises — findings
+
+- **Nothing branched on the return value** — verified at both call sites, not assumed: one logs the
+  status on the very next line, the other discards it entirely. Gating the expensive part was
+  therefore safe.
+- **A second call site turned up that the ticket did not mention**: `checkStorage()` also runs inside
+  `saveConfig`, so the whole sync store was being read on **every Save**, not only on startup. The
+  same change covers it; recorded because the ticket's framing ("on every panel open") understated
+  the cost.
+- **The flag lives in localStorage rather than in stored settings** — deliberate: reading a setting
+  would itself cost the round trip the switch exists to avoid.
+
+## [2] Runnability — findings
+
+- **The returned shape is unchanged whether the switch is on or off**, so both call sites keep
+  working: `devStorage` is still computed, since that is a cheap local read, and only the
+  whole-store dump and the per-key legacy scan are gated.
+- **Verified end to end in the running app**, not only in tests: with the flag absent the whole-store
+  read count is 0; with it set to `'true'` it is 1; and `isStorageDebugEnabled()` agrees with the flag
+  in both directions.
+- The flag read is wrapped in try/catch, so a storage-access exception degrades to "off" rather than
+  breaking startup.
+
+## [3] Security correctness — one incidental improvement
+
+`chrome.storage.sync.get(null)` dumped **the entire store to the console on every panel open**,
+including the encrypted API-key entries, and `devStorage` was printed alongside it. The values are
+encrypted, so this was not a plaintext leak, but dumping everything unconditionally is more exposure
+than a diagnostic warrants. It is now off unless someone asks for it.
+
+## [4] Consistency — findings
+
+- The flag name `xnote-debug-storage` follows the existing `xnote-` localStorage prefix used by
+  `xnote-llm-provider` and `xnote-api-keys`.
+- The switch is documented in CLAUDE.md's testing section rather than only in a code comment, so it is
+  discoverable by someone debugging rather than only by someone already reading this function.

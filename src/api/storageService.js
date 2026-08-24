@@ -14,6 +14,10 @@ const SYNC_TO_LOCAL_MIGRATION_MARKER = 'storage_migration_sync_to_local_v1'
 // Same purpose for the plain-text-to-encrypted migration of the sensitive keys.
 const ENCRYPTION_MIGRATION_MARKER = 'storage_migration_encryption_v1'
 
+// Set this in the panel's localStorage to make checkStorage dump the whole store:
+//   localStorage.setItem('xnote-debug-storage', 'true')
+const STORAGE_DEBUG_FLAG = 'xnote-debug-storage'
+
 // Constants
 export const STORAGE_KEYS = {
   OPENAI_API_KEY: 'openai_api_key',  // Official OpenAI API
@@ -404,7 +408,18 @@ export async function removeStoredValue(key) {
  * Debug function to check and log storage status
  * This helps diagnose storage issues in the console
  */
-export async function checkStorage(backend = chromeStorageBackend) {
+export function isStorageDebugEnabled() {
+  // A localStorage flag rather than a stored setting: reading a setting would itself
+  // cost the storage round trip this switch exists to avoid.
+  try {
+    return typeof localStorage !== 'undefined' &&
+      localStorage.getItem(STORAGE_DEBUG_FLAG) === 'true';
+  } catch (error) {
+    return false;
+  }
+}
+
+export async function checkStorage(backend = chromeStorageBackend, { verbose = isStorageDebugEnabled() } = {}) {
   const isExtension = backend.isAvailable();
   const hasExtensionURL = isExtensionURL();
 
@@ -412,8 +427,9 @@ export async function checkStorage(backend = chromeStorageBackend) {
   console.log(`URL indicates extension mode: ${hasExtensionURL}`);
   console.log(`Chrome storage API available: ${isExtension}`);
 
-  if (isExtension) {
-    // Passing null asks the backend for everything it holds
+  // Reading the whole store is the expensive part, and it exists only to be printed,
+  // so it happens only when someone is actually looking.
+  if (isExtension && verbose) {
     try {
       console.log('Chrome storage keys:');
       console.log(await backend.syncGet(null));
@@ -422,18 +438,18 @@ export async function checkStorage(backend = chromeStorageBackend) {
     }
   }
 
-  // The development-mode mirror only exists in a browser
   let devStorage = {};
   if (typeof localStorage !== 'undefined') {
-    console.log('localStorage keys:');
     devStorage = getDevStorage();
-    console.log(`xnote-api-keys:`, devStorage);
+    if (verbose) {
+      console.log('localStorage keys:');
+      console.log(`xnote-api-keys:`, devStorage);
 
-    // Check for old dev_ keys
-    for (const key of Object.values(STORAGE_KEYS)) {
-      const oldValue = localStorage.getItem(`dev_${key}`);
-      if (oldValue) {
-        console.log(`Found old dev_${key} in localStorage:`, oldValue);
+      for (const key of Object.values(STORAGE_KEYS)) {
+        const oldValue = localStorage.getItem(`dev_${key}`);
+        if (oldValue) {
+          console.log(`Found old dev_${key} in localStorage:`, oldValue);
+        }
       }
     }
   }
