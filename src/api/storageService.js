@@ -444,31 +444,11 @@ export async function checkStorage(backend = chromeStorageBackend) {
  * This should be called when the application starts
  */
 export async function initializeStorage() {
-  // CRITICAL: First, clean up any large keys from sync storage that might be causing quota issues
-  // This must happen BEFORE any other storage operations to prevent quota exceeded errors
-  if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
-    const problematicKeys = [
-      'drive_location_mappings',
-      STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS,
-      STORAGE_KEYS.SUMMARY_FILE_MAPPINGS,
-      STORAGE_KEYS.SUMMARY_UPLOAD_STATUS
-    ];
-
-    console.log('🧹 Cleaning up potential large keys from sync storage...');
-
-    // Fire-and-forget cleanup - start immediately, don't block on it
-    try {
-      chrome.storage.sync.remove(problematicKeys, () => {
-        if (chrome.runtime.lastError) {
-          console.warn('Cleanup note:', chrome.runtime.lastError.message);
-        } else {
-          console.log('✅ Cleaned problematic keys from sync storage');
-        }
-      });
-    } catch (e) {
-      console.warn('Could not initiate sync storage cleanup:', e);
-    }
-  }
+  // No eager removal of the large sync keys here. It used to delete exactly the keys
+  // migrateSyncToLocalStorage then reads, so the mapping data was destroyed instead of
+  // moved to local storage. The migration removes them itself, after copying them, which
+  // frees the same quota without losing anything — and nothing between the two writes to
+  // sync, so there is no quota pressure in the gap.
 
   // Check if we're running in an extension context
   const isExtUrl = isExtensionURL();

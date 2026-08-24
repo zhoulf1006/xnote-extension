@@ -13,7 +13,8 @@ import {
   getStoredValue,
   storeLocalValue,
   getLocalValue,
-  checkStorage
+  checkStorage,
+  STORAGE_KEYS
 } from '../src/api/storageService.js';
 
 // Guard against a stray chrome global leaking in from another module
@@ -104,5 +105,35 @@ describe('checkStorage with an injected backend', () => {
     const status = await checkStorage(backend);
     expect(status.isExtensionMode).toBe(true);
     expect(backend.calls.syncGet).toBeGreaterThan(0);
+  });
+});
+
+describe('startup sequence preserves mapping data while freeing sync quota', () => {
+  // Sourced from production rather than retyped: a rename there must break this
+  // test loudly instead of quietly making it seed keys nothing looks at.
+  const MAPPING_KEYS = [
+    'drive_location_mappings',
+    STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS,
+    STORAGE_KEYS.SUMMARY_FILE_MAPPINGS,
+    STORAGE_KEYS.SUMMARY_UPLOAD_STATUS
+  ];
+
+  test('every mapping key present in sync ends up in local, and none is left in sync', async () => {
+    const seeded = {};
+    for (const key of MAPPING_KEYS) seeded[key] = { [key + '_value']: true };
+    const backend = createMemoryBackend({ sync: { ...seeded } });
+
+    await migrateSyncToLocalStorage(backend);
+
+    // Data preserved: nothing may be dropped on the floor
+    for (const key of MAPPING_KEYS) {
+      const local = await backend.localGet([key]);
+      expect(local[key]).toEqual(seeded[key]);
+    }
+    // Quota freed: the whole point of touching these keys at all
+    for (const key of MAPPING_KEYS) {
+      const sync = await backend.syncGet([key]);
+      expect(sync[key]).toBeUndefined();
+    }
   });
 });

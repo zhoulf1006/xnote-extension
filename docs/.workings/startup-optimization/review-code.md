@@ -92,3 +92,44 @@ sync in order to copy them into local storage. The two lists were compared and a
 2. Make `initializeStorage` injectable, which needs the environment probes (`isExtensionURL`,
    `waitForChromeAPI`) injected alongside the storage backend — impact: self-inflicted; suggestion:
    do it in #18, where testing startup ordering requires it.
+
+---
+
+# review-code — #21 startup cleanup destroyed the data the migration moves
+
+Change surface: `storageService.js` (`initializeStorage` — removal of the eager cleanup block),
+`tests/storageBackend.test.js` (one invariant case added).
+
+## [1] Underlying premises — findings
+
+- **The migration frees the same quota the cleanup was there for** — confirmed: its key list holds
+  the same four keys, and it calls `syncRemove` for each one inside the per-key loop. The new test
+  asserts all four are absent from sync afterwards, so the quota goal is protected by a check rather
+  than by argument.
+- **Nothing between the two steps writes to sync**, which is what the cleanup's "must happen BEFORE
+  any other storage operations" comment claimed to protect — confirmed by inspecting
+  `encryptionService.initialize` and `secureStorageService.initialize`: neither performs a storage
+  write. So there is no quota pressure in the gap the cleanup was covering.
+- **Still inferred, not measured**: that the fire-and-forget remove actually completed before the
+  migration's read in a real extension. The fix is safe either way — removing the cleanup cannot make
+  matters worse — but ticket #21 carries an acceptance criterion asking for extension-context
+  evidence, and **that criterion is not met by this change**. It is called out in the delivery notes
+  as outstanding rather than quietly ticked.
+
+## [2] Runnability — findings
+
+- `initializeStorage` still returns its status object and still performs its remaining work; verified
+  in the running app, which reported `storageType: localStorage`, `encryptionEnabled: true`.
+- **Nothing else depended on the removed block** — searched for `problematicKeys` repo-wide, no
+  remaining references.
+
+## [3] Security correctness — conclusion: no findings
+
+Deleting a destructive operation removes an unwanted side effect; nothing about secret handling
+changes.
+
+## [4] Consistency — findings
+
+- The reason for the absence is written **at the site where someone would otherwise re-add it**,
+  naming the failure it caused. A removal with no trace invites reinstatement by the next person who
+  reads the quota comment in isolation.
