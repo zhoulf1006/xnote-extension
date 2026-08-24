@@ -283,3 +283,55 @@ than a diagnostic warrants. It is now off unless someone asks for it.
   `xnote-llm-provider` and `xnote-api-keys`.
 - The switch is documented in CLAUDE.md's testing section rather than only in a code comment, so it is
   discoverable by someone debugging rather than only by someone already reading this function.
+
+---
+
+# review-code — #17 non-blocking Drive initialization
+
+Change surface: `stores/googleDrive.js` (injectable service, initialization state, readiness gate,
+`syncAll` guard), `App.vue` (startup no longer awaits, indicator conditions), `tests/driveInit.test.js`.
+
+## [1] Underlying premises — findings
+
+- **The prototype gate was cleared by choice, not by omission.** The user selected reusing the
+  existing dot vocabulary, so connecting maps to the amber pulse and failure to the red dot that
+  already exist. No new visual form is introduced, which is the declared exemption; had a distinct
+  "connecting" treatment been chosen it would have gone through a prototype round first.
+- **The four states are measurably distinct**, verified by computed style rather than by eye:
+  amber `rgb(255,193,7)` pulsing, red `rgb(224,49,49)`, green `rgb(76,175,80)`, grey
+  `rgb(108,117,125)`.
+- **Not verified**: the states as driven by a *real* Drive call in the extension. Dev mode has no
+  `chrome.identity`, so the store was driven directly. The rendering path is real; what is simulated
+  is the cause. Extension-mode confirmation belongs to closeout #19.
+
+## [2] Runnability — findings
+
+- **A defect the ticket did not anticipate, fixed here**: the previous `initialize()` set
+  `isAvailable = false` in its catch, and the nav entry renders `v-if="isAvailable"`. A failed
+  initialization therefore made the whole Storage & Sync entry **disappear**, leaving no way to open
+  it and retry — the opposite of the ticket's "leaves the panel usable" requirement. Availability is
+  now the capability question only; failure is carried by `initFailed`.
+- **`syncAll` would have misreported the cause.** Reached during initialization, `isConnected` is not
+  yet final, so it returned "Not connected to Google Drive" — a claim about a fact it could not yet
+  know. It now awaits readiness first.
+- **Initialization never rejects**: the promise settles either way, and `whenReady()` resolves on both
+  paths, so a caller cannot hang on a failure.
+- **The indicator cannot show connected and connecting at once** — `connected` is conditioned on
+  `!isInitializing`, so the states are mutually exclusive rather than merely ordered in CSS.
+
+## [3] Security correctness — conclusion: no findings
+
+No change to what is stored, requested or logged.
+
+## [4] Consistency — findings
+
+- The injectable-service parameter follows the same defaulted-argument shape used by the storage
+  backend in #13, rather than inventing a second injection style.
+- `isUsable()` is optional on the service: production `googleDriveService` does not define it and
+  falls back to the browser check, so nothing about the real path changed.
+
+## Refactor list (not blocking)
+
+1. The startup sequence in `App.vue`'s `onMounted` still has no seam, so "the rest of startup
+   completes while Drive hangs" is covered by observation rather than by a test. #18 needs that seam
+   to test ordering and should introduce it.
