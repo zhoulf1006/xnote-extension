@@ -2,9 +2,26 @@ import { llmProviders, defaultProvider, LLM_PROVIDER_STORAGE_KEY } from '@/confi
 import { ProviderFactory } from './providers/providerFactory';
 import { getProviderImplementation } from './providers/providerRegistry';
 
+/**
+ * Persist the selected provider. Guarded because this module exports a singleton whose
+ * construction runs at import time, and the initialization it kicks off reaches here —
+ * unguarded, that made the module unloadable outside a browser. In a browser, unchanged.
+ */
+function rememberProvider(providerName) {
+  if (typeof localStorage !== 'undefined') {
+    localStorage.setItem(LLM_PROVIDER_STORAGE_KEY, providerName);
+  }
+}
+
 export class LLMService {
   constructor(provider = defaultProvider) {
-    const savedProvider = localStorage.getItem(LLM_PROVIDER_STORAGE_KEY) || provider;
+    // Guarded because this module exports a singleton, so the constructor runs at
+    // import time: reading localStorage unguarded made the module — and everything
+    // importing it — unloadable outside a browser. In a browser this is unchanged.
+    const storedProvider = typeof localStorage !== 'undefined'
+      ? localStorage.getItem(LLM_PROVIDER_STORAGE_KEY)
+      : null;
+    const savedProvider = storedProvider || provider;
     // Initialize with empty provider - will be set asynchronously
     this.currentProvider = savedProvider;
     this.providerInstance = null;
@@ -43,7 +60,7 @@ export class LLMService {
         this.providerInstance = null;
         this.configurationError = `API key not found for provider: ${config.name}. Configure it in the LLM Provider settings.`;
         // Still save the provider selection so user's choice is remembered
-        localStorage.setItem(LLM_PROVIDER_STORAGE_KEY, providerName);
+        rememberProvider(providerName);
         console.warn(`Provider ${providerName} requires configuration`);
         return; // Don't throw, just return
       }
@@ -69,14 +86,14 @@ export class LLMService {
       }
 
       // Save the current provider to localStorage
-      localStorage.setItem(LLM_PROVIDER_STORAGE_KEY, providerName);
+      rememberProvider(providerName);
     } catch (error) {
       console.error(`Failed to initialize provider ${providerName}:`, error);
       this.isInitialized = false;
       this.requiresConfiguration = true;
       this.configurationError = error.message;
       // Still save the provider selection
-      localStorage.setItem(LLM_PROVIDER_STORAGE_KEY, providerName);
+      rememberProvider(providerName);
     }
   }
 

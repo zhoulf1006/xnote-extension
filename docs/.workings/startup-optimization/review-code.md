@@ -133,3 +133,57 @@ changes.
 - The reason for the absence is written **at the site where someone would otherwise re-add it**,
   naming the failure it caused. A removal with no trace invites reinstatement by the next person who
   reads the quota comment in isolation.
+
+---
+
+# review-code — #22 import-time browser globals across the singleton modules
+
+Change surface: `vitest.config.js` (`@` alias), `llm.js` (guarded provider read plus a guarded
+persist helper), `tests/moduleImport.test.js` (new).
+
+## [1] Underlying premises — findings
+
+- **The question was unanswerable before, and that was the real blocker.** Vitest had no `@` alias,
+  so several modules failed on module *resolution* — indistinguishable from failing for their own
+  reasons. Mirroring the alias from `vite.config.js` made the probe meaningful; only then could the
+  enumeration produce an answer rather than noise.
+- **"Only `encryptionService` was affected" is now proven, not assumed.** Of the eight singleton
+  modules, seven load cleanly and exactly one — `llm.js` — did not. Before this ticket that was
+  explicitly recorded as unknown.
+- **My first enumeration was wrong, and the correction matters.** The initial pattern matched only
+  `… = new X()` and silently missed the `export default new X()` form, hiding `linksService`,
+  `encryptionService` and `quickLinksService`. The widened pattern found 8 modules where the first
+  found 5. Recorded because the failure mode is exactly the one the ticket warns about: an
+  enumeration that looks complete and is not.
+
+## [2] Runnability — findings
+
+- **Browser behaviour is unchanged**, verified in the running app rather than argued: the provider is
+  still read at construction (`gemini`), switching still persists (`deepseek`), and the previous
+  selection was restored afterwards so the app was left as found.
+- **The unhandled rejection was a real second defect, not noise.** Guarding only the constructor's
+  read left the suite failing: the eager `setProvider()` reached a `localStorage.setItem` inside its
+  own `catch` block, which threw again and rejected. Three write sites existed, all now routed
+  through one guarded helper.
+
+## [3] Security correctness — conclusion: no findings
+
+Guarding a write changes neither what is written nor where.
+
+## [4] Consistency — findings
+
+- One guarded helper rather than three inline guards, so a fourth write site cannot quietly reappear
+  unguarded next to guarded ones.
+- **Declared deviation from the ticket.** #22 asks for defects to be "fixed by deferring the
+  browser-dependent work out of construction, as #13 did". `llm.js` was **guarded** instead of
+  deferred. Deferring would move when `requiresConfiguration` becomes accurate, and `chatService`
+  reads that flag *before* calling `chat()` — so deferral changes user-visible error behaviour on the
+  first call, which is beyond what this ticket asked for. Guarding satisfies the acceptance criterion
+  (module imports cleanly, values unchanged) with no behaviour change at all.
+
+## Refactor list (not blocking)
+
+1. `llm.js` still starts asynchronous provider initialization **inside its constructor**, so importing
+   the module performs storage I/O before the app has decided anything. Guarding made it harmless,
+   but it remains a design smell — impact: self-inflicted; suggestion: defer to first use *together*
+   with giving `chatService` an explicit readiness check, since the two must change together.
