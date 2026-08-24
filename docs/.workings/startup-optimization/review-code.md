@@ -187,3 +187,55 @@ Guarding a write changes neither what is written nor where.
    the module performs storage I/O before the app has decided anything. Guarding made it harmless,
    but it remains a design smell — impact: self-inflicted; suggestion: defer to first use *together*
    with giving `chatService` an explicit readiness check, since the two must change together.
+
+---
+
+# review-code — #14 migration markers
+
+Change surface: `storageService.js` (`migrateSyncToLocalStorage`, `migrateToEncrypted`, two marker
+constants), `tests/storageBackend.test.js` (five cases added, one refined).
+
+## [1] Underlying premises — findings
+
+- **Markers belong in local storage, not sync** — deliberate, for two reasons. Per-device is the
+  correct scope: each device migrates its own copy, and a device that has never migrated must still
+  do so even if another already has. And a sync-stored marker would consume the very write quota this
+  ticket exists to stop consuming.
+- **The measurement is real, not projected** — the before and after were both measured through the
+  counting backend, and the after was re-confirmed in the running app: a repeat startup goes from
+  4 reads plus 4 writes to a single marker lookup.
+- **In development mode the encryption migration still runs every reload**, because the marker is only
+  written when a real backend is available. Deliberate: the development path has no chrome storage to
+  mark against, and marking there would be meaningless. Noted so it is not mistaken for a defect.
+
+## [2] Runnability — findings
+
+- **A second data-loss path was found by the red test and fixed.** The migration previously removed a
+  key from sync "even if the read or the store failed". With markers alone, a failed copy would have
+  removed the source and then retried against nothing. The removal now happens only after the copy
+  succeeds, or when there was nothing to copy. This is a behaviour change beyond "stop re-running",
+  and it is in scope: the ticket's criterion is that a partial failure must not strand data.
+- **A partial failure leaves the work unmarked**, so the next startup retries. Covered by a case that
+  fails one key's write and then asserts the retry succeeds.
+- **A failed read is treated as unsettled, not as absent** — otherwise a transient read error would
+  look like "no data here", remove the key, and destroy it.
+- **`migrateToEncrypted` marks only on a fully clean run** (`errors.length === 0`), so one failing key
+  keeps the whole migration retryable.
+
+## [3] Security correctness — conclusion: no findings
+
+The encryption migration's logic is unchanged; it gained a backend parameter and a completion marker.
+No key material is logged or persisted differently.
+
+## [4] Consistency — findings
+
+- Both markers are **versioned** (`..._v1`), and each constant's comment states what it records, so a
+  future migration adds its own marker rather than silently riding on an existing one.
+- The two migrations now follow the same shape: check marker, do work, mark only on full success.
+
+## Refactor list (not blocking)
+
+1. The marker constants are module-local rather than part of `STORAGE_KEYS`. Left deliberately: they
+   are internal bookkeeping, not user configuration, and putting them in `STORAGE_KEYS` would sweep
+   them into `checkStorage`'s dump and the sensitive-key iteration. Worth revisiting only if a third
+   marker appears.

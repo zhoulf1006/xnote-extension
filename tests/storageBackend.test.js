@@ -14,7 +14,8 @@ import {
   storeLocalValue,
   getLocalValue,
   checkStorage,
-  STORAGE_KEYS
+  STORAGE_KEYS,
+  secureStorageService
 } from '../src/api/storageService.js';
 
 // Guard against a stray chrome global leaking in from another module
@@ -66,13 +67,20 @@ describe('migrateSyncToLocalStorage with an injected backend', () => {
     expect(sync.drive_location_mappings).toBeUndefined();
   });
 
-  test('writes nothing to local storage when sync holds nothing to migrate', async () => {
+  test('copies no mapping data to local storage when sync holds nothing to migrate', async () => {
     const backend = createMemoryBackend();
     await migrateSyncToLocalStorage(backend);
-    // Asserting on the write itself, not on the resulting contents: an object holding
-    // the key with an undefined value compares equal to an empty one, so a contents
-    // check cannot tell a spurious write from no write.
-    expect(backend.calls.localSet).toBe(0);
+    // Counting keys present rather than comparing objects: a key set to undefined
+    // compares equal to an absent one, so a contents comparison could not tell a
+    // spurious write from no write. The completion marker is a local write too, so
+    // this asserts on the mapping keys specifically rather than on the write count.
+    const written = await backend.localGet([
+      'drive_location_mappings',
+      STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS,
+      STORAGE_KEYS.SUMMARY_FILE_MAPPINGS,
+      STORAGE_KEYS.SUMMARY_UPLOAD_STATUS
+    ]);
+    expect(Object.keys(written)).toHaveLength(0);
   });
 });
 
@@ -135,5 +143,91 @@ describe('startup sequence preserves mapping data while freeing sync quota', () 
       const sync = await backend.syncGet([key]);
       expect(sync[key]).toBeUndefined();
     }
+  });
+});
+
+describe('one-time migrations do not re-run once complete', () => {
+  const MAPPING_KEYS = [
+    'drive_location_mappings',
+    STORAGE_KEYS.SUMMARY_FOLDER_MAPPINGS,
+    STORAGE_KEYS.SUMMARY_FILE_MAPPINGS,
+    STORAGE_KEYS.SUMMARY_UPLOAD_STATUS
+  ];
+
+  test('a second startup performs no migration reads or writes', async () => {
+    const backend = createMemoryBackend({ sync: { drive_location_mappings: { a: 1 } } });
+    await migrateSyncToLocalStorage(backend);
+
+    const afterFirst = { ...backend.calls };
+    await migrateSyncToLocalStorage(backend);
+
+    // Only the marker lookup may happen on a repeat startup — no per-key traffic,
+    // and in particular no writes, which consume the hourly sync write quota.
+    expect(backend.calls.syncGet).toBe(afterFirst.syncGet);
+    expect(backend.calls.syncRemove).toBe(afterFirst.syncRemove);
+    expect(backend.calls.localSet).toBe(afterFirst.localSet);
+  });
+
+  test('a user who has never migrated still migrates on their first startup', async () => {
+    const seeded = {};
+    for (const key of MAPPING_KEYS) seeded[key] = { [key]: 'value' };
+    const backend = createMemoryBackend({ sync: { ...seeded } });
+
+    await migrateSyncToLocalStorage(backend);
+
+    for (const key of MAPPING_KEYS) {
+      expect((await backend.localGet([key]))[key]).toEqual(seeded[key]);
+      expect((await backend.syncGet([key]))[key]).toBeUndefined();
+    }
+  });
+
+  test('a key whose copy fails is retried on the next startup, not marked done', async () => {
+    const backend = createMemoryBackend({ sync: { drive_location_mappings: { a: 1 } } });
+    let failNext = true;
+    const flaky = {
+      ...backend,
+      localSet: async (items) => {
+        if (failNext && 'drive_location_mappings' in items) {
+          failNext = false;
+          throw new Error('quota exceeded');
+        }
+        return backend.localSet(items);
+      }
+    };
+
+    await migrateSyncToLocalStorage(flaky);
+    // The copy failed, so the source must survive for the retry to have anything to move
+    expect((await backend.syncGet(['drive_location_mappings'])).drive_location_mappings).toEqual({ a: 1 });
+
+    await migrateSyncToLocalStorage(flaky);
+    expect((await backend.localGet(['drive_location_mappings'])).drive_location_mappings).toEqual({ a: 1 });
+  });
+});
+
+describe('the encryption migration also stops re-running once complete', () => {
+  test('a marked run returns immediately without reading any sensitive key', async () => {
+    const backend = createMemoryBackend({
+      local: { storage_migration_encryption_v1: true },
+      sync: { openai_api_key: 'plain-value' }
+    });
+
+    const result = await secureStorageService.migrateToEncrypted(backend);
+
+    expect(result.skipped).toBe(true);
+    // The whole cost saved: no per-key lookups at all
+    expect(backend.calls.syncGet).toBe(0);
+    expect(backend.calls.syncSet).toBe(0);
+  });
+
+  test('a run that could not encrypt is not marked done, so it retries later', async () => {
+    // Encryption is unavailable in this environment, which is exactly the case that
+    // must stay unmarked: values stored plain now still need migrating if it becomes
+    // available later.
+    const backend = createMemoryBackend({ sync: { openai_api_key: 'plain-value' } });
+
+    await secureStorageService.migrateToEncrypted(backend);
+
+    const marker = await backend.localGet(['storage_migration_encryption_v1']);
+    expect(marker.storage_migration_encryption_v1).toBeUndefined();
   });
 });
