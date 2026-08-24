@@ -192,3 +192,37 @@ Both failures landed on the mutated behaviour, and both were restored with preci
 The three `migrateSyncToLocalStorage` cases were red first, for the right reasons: the repeat-startup
 case reported `expected 8 to be 4` (the re-run), and the retry case reported
 `expected undefined to deeply equal { a: 1 }` — the stranded-data defect itself.
+
+---
+
+# review-tests — #16 opt-in diagnostics
+
+## Dimension 1: coverage
+
+Two cases: with the switch off nothing reads the whole store, and with it on the same information is
+still reported. Both also assert the returned status keeps its shape, because that is what the two
+production call sites consume — gating the expensive work would be a regression if it changed what
+callers receive.
+
+The remaining criterion (the switch is discoverable) is **evidence**, not a case: it is documented in
+CLAUDE.md.
+
+## Dimension 2: case design — one case retired, deliberately
+
+The earlier case "reports the backend as the active storage and reads what it holds" asserted
+`syncGet > 0` on a plain `checkStorage(backend)` call — an assertion that **encoded the always-on read
+as the contract**. That is exactly the behaviour this ticket changes, so keeping it would have meant
+either a failing suite or weakening it into vacuity. It is superseded by the "switch on" case, which
+makes the same assertion about the same behaviour, now under the condition where it belongs.
+
+Recorded rather than quietly deleted: retiring a test because it contradicts a change is legitimate
+only when something else still covers the behaviour, and here it does.
+
+## Dimension 3: false passes — mutation-verified
+
+The "switch on" case passed on its first run, so the pair was mutated: making `checkStorage` ignore
+`verbose` (reverting to always-on) turned the "switch off" case red with `expected 1 to be +0`, and
+only that case. Restored, green.
+
+Note the asymmetry: the "switch off" case is the one carrying the guarantee, and it was red before the
+implementation. The "switch on" case guards against over-correcting into a switch that never dumps.
