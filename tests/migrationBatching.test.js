@@ -88,14 +88,35 @@ describe('the sync-to-local migration batches its reads and removes', () => {
 });
 
 describe('the encryption migration batches its reads', () => {
-  // Encryption needs a device key, which is derived from `screen`. Supplying it is
-  // supplying the environment a real browser has, not reaching into the service.
+  // Encryption needs a device key, derived from `screen` and `navigator`. Supplying
+  // both is supplying the environment a real browser has, not reaching into the
+  // service.
+  //
+  // Both are defined explicitly rather than leaning on whatever the runtime happens
+  // to provide: Node 24 has a global `navigator` and Node 20 does not, so relying on
+  // it made this block pass locally and fail on CI. Pinned here, the Node version
+  // stops mattering. defineProperty rather than assignment because where `navigator`
+  // does exist it is getter-only, and assigning to it throws.
+  const originalNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+
   beforeAll(async () => {
     globalThis.screen = { width: 1440, height: 900, colorDepth: 24 };
+    Object.defineProperty(globalThis, 'navigator', {
+      value: { userAgent: 'xnote-test-agent', language: 'en-US' },
+      configurable: true,
+      writable: true
+    });
     await secureStorageService.initialize();
   });
 
-  afterAll(() => { delete globalThis.screen; });
+  afterAll(() => {
+    delete globalThis.screen;
+    if (originalNavigator) {
+      Object.defineProperty(globalThis, 'navigator', originalNavigator);
+    } else {
+      delete globalThis.navigator;
+    }
+  });
 
   const SENSITIVE_KEYS = [
     'openai_api_key',

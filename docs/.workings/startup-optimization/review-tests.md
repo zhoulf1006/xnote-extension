@@ -378,3 +378,33 @@ the pair even where the guard alone was not separately driven red.
 `encryptionEnabled === true` in its own case rather than skipping when encryption is
 unavailable. An environment change turns that red instead of quietly passing the whole
 block — the distinction the report cannot otherwise show.
+
+### Addendum — the CI-only failure, and why nothing local caught it
+
+The first CI run of this branch failed while the same suite was green locally.
+
+**Root cause.** `migrationBatching.test.js` supplies `screen` so the device-key
+derivation can run, but that derivation also reads `navigator.userAgent` and
+`navigator.language`. The block never supplied `navigator` — it silently used whatever
+the runtime provided. Node 24 (local) has a global `navigator`; Node 20 (CI, pinned
+because `canvas@2.11.2` has no prebuilt binary for newer) does not.
+
+**Why the local gate did not catch it.** The gate runs the suite on whatever Node is on
+PATH. Nothing compares that against the version CI pins, so a runtime-dependent test is
+invisible locally by construction — the check and the thing it should have checked were
+never in the same place.
+
+**Why it surfaced as a clean failure rather than a silent pass.** The block asserts
+`encryptionEnabled === true` in a case of its own instead of skipping when encryption is
+unavailable. On CI that case went red and named the reason. Had it been written as a
+conditional skip, the four encryption cases would have been quietly skipped and CI would
+have been green with row 9 unverified — the false green this exact guard exists to
+prevent. It is the one case here that has now been driven red by a real environment
+rather than by a mutation.
+
+**Defence landed.** Two lines in CLAUDE.md's Testing section: define browser globals
+rather than inheriting them, and the command for running the suite under CI's Node.
+Placed there rather than in a retrospective because that is the path a test author is
+already on. Verified against the real thing, not inferred: with the fix, `typeof
+navigator === 'undefined'` confirmed on Node 20.9.0 and all 84 cases pass there and on
+Node 24.
