@@ -21,11 +21,11 @@ Enumeration used (re-runnable):
 | 5 | A never-migrated user must still migrate correctly once gating exists | #14 | Pre-migration data seeded, placement asserted — test |
 | 6 | A partially failed migration must not be marked done | #14 | Failing write retried on next startup — test |
 | 7 | The migration gate is only safe if the migrations are startup-only | #14 | Call-site grep output recorded — evidence |
-| 8 | Mapping keys are read one per round trip although the API accepts arrays | #15 | Backend read-call count asserted — test |
-| 9 | Sensitive keys are read one per round trip | #15 | Backend read-call count asserted — test |
-| 10 | Drive state is read across five-plus separate round trips | #15 | Backend read-call count asserted — test |
-| 11 | Batched reads must handle absent and empty keys identically to per-key reads | #15 | Present/absent/empty cases — test |
-| 12 | Batched reads must degrade like the per-key path on backend failure | #15 | Rejecting backend case — test |
+| 8 | Mapping keys are read one per round trip although the API accepts arrays | #18 | Backend read-call count asserted — test |
+| 9 | Sensitive keys are read one per round trip | #18 | Backend read-call count asserted — test |
+| 10 | Drive state is read across eight sequential round trips for a connected user, one key twice | #18 | Backend read-call count asserted — test |
+| 11 | Batched reads must handle absent and empty keys identically to per-key reads | #18 | Present/absent/empty cases — test |
+| 12 | Batched reads must degrade like the per-key path on backend failure | #18 | Rejecting backend case — test |
 | 13 | `checkStorage()` reads the entire sync store on every open, purely to log it | #16 | No read-all reaches the backend with the switch off — test |
 | 14 | Its return value is never used for control flow, so gating it is safe | #16 | Call-site grep output recorded — evidence |
 | 15 | The debug switch must be discoverable rather than folklore | #16 | Documented in CLAUDE.md — evidence |
@@ -36,6 +36,8 @@ Enumeration used (re-runnable):
 | 20 | Independent steps are serialised for no reason | #18 | Independent steps observed overlapping — test |
 | 21 | The one genuine prerequisite must keep its ordering | #18 | Ordering asserted for the dependent step — test |
 | 22 | One step failing must not prevent the others, and must still surface | #18 | Rejecting-step case — test |
+| 22a | The startup sequence has no seam, so its ordering cannot be tested at all | #18 | Sequence driven with injected steps — test |
+| 22b | Row 16 is backed by store-level state under a hang, not by the startup sequence proceeding past it | #18 | Hanging Drive step, the other startup steps still complete — test |
 
 ## Rows owned by the closeout ticket
 
@@ -49,6 +51,47 @@ would legitimately skip them.
 | 25 | The end-to-end round-trip count actually dropped | #19 | Counts measured before the first ticket and after the last — evidence |
 | 26 | Markers, batching and concurrency together produce a correct end state | #19 | Full startup path with all changes active — test |
 | 27 | No `docs/features/` entry became false (expected: none, since no user-visible behaviour changes) | #19 | features-catalog closeout conclusions recorded — evidence |
+
+## Ownership changes
+
+**Rows 8–12 moved from #15 to #18** (2026-08-27). #15 was closed as superseded, not dropped, and
+these rows are why the distinction matters: a row still pointing at a closed ticket is how a
+requirement quietly stops being anyone's.
+
+What changed under those rows, stated precisely rather than as "mostly fixed":
+
+- Rows 8 and 9 (mapping keys, sensitive keys) are now reached only on a run where the corresponding
+  migration has not completed, because #14 added completion markers. They did not stop existing —
+  a first-ever startup still performs them. What changed is that they left the *repeat* startup path,
+  which is the one every open after the first takes.
+- Row 10 (Drive state) is unchanged in cost. #17 moved it off the critical path, so it no longer
+  delays anything the user waits for, but every round trip is still issued. Re-counting it while
+  re-homing the row showed the original "five-plus" understated it: for a connected user the chain
+  is eight sequential reads, and `GOOGLE_DRIVE_CONNECTED` is read twice — once by the store and
+  again inside the authentication check it then calls. The row now carries the counted figure.
+  Counted with `grep -c "await getStoredValue("` over the Drive store and service, then walked by
+  hand through the connected branch; recorded because a "five-plus" that nobody re-derives is how
+  an estimate becomes a fact.
+
+So one row is genuinely still on the hot path and two are on a path taken once per install. All
+three are reads in the same code #18 restructures, which is the reason to fold rather than to keep
+a separate ticket — not a claim that the work became unnecessary.
+
+**Rows 22a and 22b added** — the missing startup seam, and the part of row 16 that is not actually
+covered yet.
+
+Row 16 reads "Drive init blocks the rest of startup" and names a test as its backing. Tests using a
+never-settling Drive service do exist, so the row is not unbacked — but what they assert is the
+*store's* behaviour under a hang: that it reports itself initializing, that waiting for readiness
+resolves, that a sync request queues instead of reporting "not connected". None of them asserts the
+claim the row actually makes, which is about the **startup sequence** continuing past a hung step.
+That assertion has nowhere to live: `onMounted` runs its steps inline, so there is no way to drive
+the sequence and observe what completed.
+
+The distinction is easy to lose, and losing it is the failure mode: the row looks backed, the tests
+are real and green, and the sentence the row states has still never been checked. Row 22b carries
+that remainder explicitly rather than leaving it inside a row that reads as done. Recorded here so
+"every ticket is closed, therefore the feature is done" cannot come out true while it stands.
 
 ## Not in scope
 
