@@ -226,3 +226,42 @@ only that case. Restored, green.
 
 Note the asymmetry: the "switch off" case is the one carrying the guarantee, and it was red before the
 implementation. The "switch on" case guards against over-correcting into a switch that never dumps.
+
+---
+
+# review-tests — #17 non-blocking Drive initialization
+
+## Dimension 1: coverage
+
+Four cases: an in-flight initialization reports as initializing; a failure settles into a defined
+failed state while keeping the entry in the rail; `whenReady()` resolves once initialization settles;
+and a Drive action invoked mid-initialization waits instead of misreporting.
+
+**Declared gap**: the ticket's first criterion — "startup completes while Drive init hangs" — is met by
+observation, not by a case, because `App.vue`'s `onMounted` has no seam to drive. What was observed:
+the panel mounted with all seven nav items and an interactive chat tab while Drive had not settled.
+Recorded as a refactor item for #18 rather than left implicit.
+
+The indicator criterion is **evidence**: computed colours and animation names for all four states.
+That is stronger than a screenshot for "distinctly", since it compares the actual rendered values
+rather than relying on the reader's eye.
+
+## Dimension 2: case design — no findings
+
+The Drive service is injected as a plain fake through a defaulted parameter; no module mocking. The
+hanging fake returns a promise that never settles, which is a real condition rather than a simulated
+one. Assertions read store state through the store's own interface.
+
+## Dimension 3: false passes — the one case written alongside its implementation was mutated
+
+Three cases were red first, for the right reasons (`expected undefined to be true` — the state did not
+exist yet, and `store.whenReady is not a function`).
+
+The fourth, "syncing waits for initialization rather than reporting not connected", was added in the
+same step as its guard, so it was mutation-tested: removing the `whenReady()` await turned it red with
+`expected true to be false` — the silent settle it exists to prevent. Only that case failed. Restored,
+green.
+
+Note on why the assertion is shaped as it is: it checks both that the call has **not settled** and that
+`lastSyncError` is still null. Checking only settlement would pass if the call resolved with a wrong
+error; checking only the error would pass if the call hung for an unrelated reason.

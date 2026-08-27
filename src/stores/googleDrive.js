@@ -22,52 +22,59 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
     useCustomLocation: false,
     parentFolderId: null,
     parentFolderName: null,
-    isChangingLocation: false
+    isChangingLocation: false,
+    // Startup no longer waits for Drive, so the panel needs to say which of the three
+    // outcomes it is in rather than looking identical to "not connected" while working.
+    isInitializing: false,
+    initFailed: false
   }),
 
   actions: {
     /**
      * Initialize the store and check availability
      */
-    async initialize() {
+    async initialize(service = googleDriveService) {
+      this.isInitializing = true;
+      this.initFailed = false;
+      const settled = new Promise((resolve) => { this._resolveReady = resolve; });
+      this._readyPromise = settled;
+
       try {
-        // Check if Google Drive service is available
-        this.isAvailable = typeof googleDriveService !== 'undefined' &&
-                          typeof chrome !== 'undefined' &&
-                          chrome.identity;
+        // Whether the integration exists at all is a capability question, separate
+        // from whether this attempt succeeded. An injected service may answer it
+        // itself; the real one falls back to asking the browser.
+        this.isAvailable = typeof service?.isUsable === 'function'
+          ? service.isUsable()
+          : (typeof service !== 'undefined' &&
+             typeof chrome !== 'undefined' &&
+             !!chrome.identity);
 
         if (!this.isAvailable) {
           console.log('Google Drive integration not available');
           return false;
         }
 
-        // Check stored connection status
         const isConnected = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_CONNECTED);
         this.isConnected = !!isConnected;
 
         if (this.isConnected) {
-          // Verify token is still valid
-          const authenticated = await googleDriveService.isAuthenticated();
+          const authenticated = await service.isAuthenticated();
           this.isConnected = authenticated;
         }
 
-        // Load other settings
         this.syncEnabled = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_SYNC_ENABLED) || false;
         this.lastSyncTime = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_LAST_SYNC);
 
-        // Load custom folder configuration
-        const folderConfig = await googleDriveService.getFolderConfiguration();
+        const folderConfig = await service.getFolderConfiguration();
         this.useCustomLocation = folderConfig.useCustom;
         this.parentFolderId = folderConfig.parentId;
         this.parentFolderName = folderConfig.parentName;
 
-        // Initialize drive mappings with current location
         if (this.isConnected) {
           const driveMappings = useDriveMappings();
           await driveMappings.loadMappings();
 
-          // Get root folder ID and set as current location
-          const rootFolderId = await googleDriveService.getRootFolderId();
+          const rootFolderId = await service.getRootFolderId();
           if (rootFolderId) {
             await driveMappings.setCurrentLocation(rootFolderId, this.getDisplayPath());
           }
@@ -75,10 +82,24 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
 
         return true;
       } catch (error) {
+        // isAvailable is deliberately left alone: it used to be cleared here, which
+        // removed the whole entry from the rail and left no way to retry.
         console.error('Error initializing Google Drive store:', error);
-        this.isAvailable = false;
+        this.initFailed = true;
         return false;
+      } finally {
+        this.isInitializing = false;
+        this._resolveReady?.({ failed: this.initFailed });
       }
+    },
+
+    /**
+     * Resolves once initialization has settled, either way. Callers that need Drive
+     * await this instead of acting on a half-populated store.
+     */
+    async whenReady() {
+      if (this._readyPromise) return await this._readyPromise;
+      return { failed: this.initFailed };
     },
 
     /**
@@ -155,6 +176,11 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
      * Sync all data to Google Drive
      */
     async syncAll() {
+      // Startup no longer blocks on initialization, so this can be reached while it is
+      // still running — when isConnected is not yet its final value. Reporting "not
+      // connected" then would be a lie about the cause.
+      await this.whenReady();
+
       if (!this.isConnected) {
         console.warn('Not connected to Google Drive');
         this.syncStatus = 'failed';

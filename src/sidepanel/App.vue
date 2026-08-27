@@ -20,9 +20,9 @@
         <span class="nav-text">Storage & Sync</span>
         <span class="status-dot"
               :class="{
-                'connected': googleDriveStore.isConnected,
-                'syncing': googleDriveStore.isSyncing,
-                'error': googleDriveStore.syncStatus === 'failed'
+                'connected': googleDriveStore.isConnected && !googleDriveStore.isInitializing,
+                'syncing': googleDriveStore.isSyncing || googleDriveStore.isInitializing,
+                'error': googleDriveStore.syncStatus === 'failed' || googleDriveStore.initFailed
               }"></span>
       </div>
       <div class="nav-item config-item" @click="handleConfigClick">
@@ -843,9 +843,12 @@ onMounted(async () => {
     // The store maintains backward compatibility with localStorage access
     console.log('✅ LLM config store ready (lazy initialization)');
 
-    // Initialize Google Drive store
-    await googleDriveStore.initialize();
-    console.log('✅ Google Drive store initialized');
+    // Deliberately not awaited: the panel is fully usable before Drive status is
+    // known, and this step can make network calls that would otherwise hold up
+    // everything after it. The nav indicator shows how it settles.
+    googleDriveStore.initialize().then((ok) => {
+      console.log(ok ? '✅ Google Drive store initialized' : 'ℹ️ Google Drive not initialized');
+    });
 
     // Migrate existing plain text keys to encrypted format if encryption is available
     // (Secure storage is already initialized in initializeStorage)
