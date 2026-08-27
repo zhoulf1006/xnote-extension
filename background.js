@@ -43,21 +43,44 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
+/**
+ * Register the context menus, replacing whatever is already there.
+ *
+ * Clearing first is what makes this idempotent: context menus survive an extension
+ * reload, so a bare create() of an existing id fails with "Cannot create item with
+ * duplicate id" — and, because it fails rather than replaces, a changed title would
+ * never reach an existing install.
+ *
+ * removeAll is asynchronous, so there is a brief window in which the menus are gone.
+ * If the service worker were terminated inside it, they would stay gone until the
+ * next onInstalled — which for a published extension means the next version update.
+ * Registering on startup as well bounds that to the next browser launch.
+ */
+function registerContextMenus() {
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'summarizePage',
+      title: 'Summary Page',
+      contexts: ['page']
+    });
+
+    chrome.contextMenus.create({
+      id: 'saveToQuickLinks',
+      title: 'Save to Quick Links',
+      contexts: ['page']
+    });
+  });
+}
+
+// Runs when the browser starts with the extension already installed, which is the
+// only other moment the menus can be repaired without waiting for an update.
+chrome.runtime.onStartup.addListener(() => {
+  registerContextMenus();
+});
+
 // Chrome extension initialization
 chrome.runtime.onInstalled.addListener(() => {
-  // Add context menu item for page summary
-  chrome.contextMenus.create({
-    id: 'summarizePage',
-    title: 'Summary Page',
-    contexts: ['page']
-  });
-
-  // Add context menu item for saving to quick links
-  chrome.contextMenus.create({
-    id: 'saveToQuickLinks',
-    title: 'Save to Quick Links',
-    contexts: ['page']
-  });
+  registerContextMenus();
 
   // Set up transfer sync alarm for periodic change detection
   // Minimum period in Manifest V3 is 0.5 minutes (30 seconds)
