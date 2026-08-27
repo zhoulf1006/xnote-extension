@@ -45,18 +45,22 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 
 // Chrome extension initialization
 chrome.runtime.onInstalled.addListener(() => {
-  // Add context menu item for page summary
-  chrome.contextMenus.create({
-    id: 'summarizePage',
-    title: 'Summary Page',
-    contexts: ['page']
-  });
+  // onInstalled also fires on update and on every reload of an unpacked extension,
+  // but context menus survive those — so creating them again fails with
+  // "Cannot create item with duplicate id". Clearing first makes this idempotent,
+  // and is also what lets a changed title actually take effect.
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: 'summarizePage',
+      title: 'Summary Page',
+      contexts: ['page']
+    });
 
-  // Add context menu item for saving to quick links
-  chrome.contextMenus.create({
-    id: 'saveToQuickLinks',
-    title: 'Save to Quick Links',
-    contexts: ['page']
+    chrome.contextMenus.create({
+      id: 'saveToQuickLinks',
+      title: 'Save to Quick Links',
+      contexts: ['page']
+    });
   });
 
   // Set up transfer sync alarm for periodic change detection
