@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { googleDriveService } from '@/api/googleDriveService';
 import { googleFolderBrowserService } from '@/api/googleFolderBrowserService';
-import { getStoredValue, storeValue, STORAGE_KEYS } from '@/api/storageService';
+import { getStoredValues, storeValue, STORAGE_KEYS } from '@/api/storageService';
 import { useDriveMappings } from './driveMappings';
 
 export const useGoogleDriveStore = defineStore('googleDrive', {
@@ -33,7 +33,7 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
     /**
      * Initialize the store and check availability
      */
-    async initialize(service = googleDriveService) {
+    async initialize(service = googleDriveService, backend = undefined) {
       this.isInitializing = true;
       this.initFailed = false;
       const settled = new Promise((resolve) => { this._resolveReady = resolve; });
@@ -54,18 +54,19 @@ export const useGoogleDriveStore = defineStore('googleDrive', {
           return false;
         }
 
-        const isConnected = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_CONNECTED);
-        this.isConnected = !!isConnected;
+        // The authentication check reads the connected flag itself and answers false
+        // when it is unset, so reading it here as well was a second fetch of the same
+        // key for an answer already being computed.
+        this.isConnected = await service.isAuthenticated();
 
-        if (this.isConnected) {
-          const authenticated = await service.isAuthenticated();
-          this.isConnected = authenticated;
-        }
+        const settings = await getStoredValues([
+          STORAGE_KEYS.GOOGLE_DRIVE_SYNC_ENABLED,
+          STORAGE_KEYS.GOOGLE_DRIVE_LAST_SYNC
+        ], backend);
+        this.syncEnabled = settings[STORAGE_KEYS.GOOGLE_DRIVE_SYNC_ENABLED] || false;
+        this.lastSyncTime = settings[STORAGE_KEYS.GOOGLE_DRIVE_LAST_SYNC];
 
-        this.syncEnabled = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_SYNC_ENABLED) || false;
-        this.lastSyncTime = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_LAST_SYNC);
-
-        const folderConfig = await service.getFolderConfiguration();
+        const folderConfig = await service.getFolderConfiguration(backend);
         this.useCustomLocation = folderConfig.useCustom;
         this.parentFolderId = folderConfig.parentId;
         this.parentFolderName = folderConfig.parentName;

@@ -484,6 +484,7 @@ import CategoryPickerDialog from './components/Common/CategoryPickerDialog.vue';
 import { notify } from './composables/useToast';
 import { confirmAction, useConfirmHost } from './composables/useConfirm';
 import { filterVisionCapable } from '@/api/modelCatalog';
+import { runStartupSequence } from './startupSequence';
 
 const navigationStore = useNavigationStore();
 // Single app-wide confirmation dialog host (window.confirm is suppressed in side panels)
@@ -830,43 +831,75 @@ onMounted(async () => {
   });
 
   try {
-    // Initialize storage service and wait for it to complete
-    console.log('Initializing storage service...');
-    const storageStatus = await initializeStorage();
-    console.log('Storage initialization completed:', storageStatus);
-
-    // Migrate large mapping data from sync to local storage to avoid quota issues
-    await migrateSyncToLocalStorage();
-    console.log('✅ Storage migration check completed');
+    // Storage is the one genuine prerequisite; the steps after it need it up but do
+    // not need each other, so they run together rather than in a queue. Nothing here
+    // decides what the steps are — that stays visible in this list.
+    const { value: storageStatus, failures } = await runStartupSequence({
+      prerequisite: {
+        name: 'storage',
+        run: async () => {
+          console.log('Initializing storage service...');
+          const status = await initializeStorage();
+          console.log('Storage initialization completed:', status);
+          return status;
+        }
+      },
+      dependents: [
+        {
+          name: 'mapping-migration',
+          run: async () => {
+            // Moves large mapping data out of sync storage, whose quota it outgrows
+            await migrateSyncToLocalStorage();
+            console.log('✅ Storage migration check completed');
+          }
+        },
+        {
+          name: 'encryption-migration',
+          run: async () => {
+            // Secure storage was already brought up by the prerequisite
+            if (!secureStorageService.encryptionEnabled) return;
+            console.log('🔐 Encryption available, checking for migration needs...');
+            await secureStorageService.migrateToEncrypted();
+          }
+        },
+        {
+          name: 'storage-diagnostics',
+          run: async () => {
+            const status = await checkStorage();
+            console.log('Storage status check completed:', status);
+          }
+        }
+      ],
+      background: [
+        {
+          // The panel is fully usable before Drive status is known, and this can make
+          // network calls. The nav indicator shows how it settles.
+          name: 'google-drive',
+          run: async () => {
+            const ok = await googleDriveStore.initialize();
+            console.log(ok ? '✅ Google Drive store initialized' : 'ℹ️ Google Drive not initialized');
+          }
+        }
+      ],
+      onStepError: (name, error) => console.error(`❌ Startup step "${name}" failed:`, error)
+    });
 
     // Note: LLM config store will initialize itself when accessed
     // The store maintains backward compatibility with localStorage access
     console.log('✅ LLM config store ready (lazy initialization)');
 
-    // Deliberately not awaited: the panel is fully usable before Drive status is
-    // known, and this step can make network calls that would otherwise hold up
-    // everything after it. The nav indicator shows how it settles.
-    googleDriveStore.initialize().then((ok) => {
-      console.log(ok ? '✅ Google Drive store initialized' : 'ℹ️ Google Drive not initialized');
-    });
-
-    // Migrate existing plain text keys to encrypted format if encryption is available
-    // (Secure storage is already initialized in initializeStorage)
-    if (secureStorageService.encryptionEnabled) {
-      console.log('🔐 Encryption available, checking for migration needs...');
-      await secureStorageService.migrateToEncrypted();
-    }
-    
-    // Check storage status to make sure we're using the right storage
-    const status = await checkStorage();
-    console.log('Storage status check completed:', status);
-    
     // Verify extension mode is correctly detected
     console.log('Extension mode detected:', checkExtensionMode());
     console.log('Using storage type:', storageStatus.storageType);
-    
+
     if (storageStatus.isExtensionURL && !storageStatus.extensionMode) {
       console.warn('⚠️ Extension URL detected but extension mode is false. This may indicate a problem with Chrome API availability.');
+    }
+
+    // A step failing no longer takes the others down, but it must not pass silently
+    // either — the user sees the same message they saw when it aborted startup.
+    if (failures.length > 0) {
+      notify.error('There was a problem initializing the storage system. Some features may not work correctly.');
     }
   } catch (error) {
     console.error('❌ Error initializing storage:', error);

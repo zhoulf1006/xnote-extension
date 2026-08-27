@@ -194,6 +194,52 @@ export async function getStoredValue(key, envFallback, backend = chromeStorageBa
 }
 
 /**
+ * Project a raw storage result onto the requested keys.
+ *
+ * chrome.storage answers a missing key by leaving the property off entirely. Every
+ * requested key gets an own property here, absent ones as null, which is what the
+ * per-key path returns — so a caller cannot tell the two paths apart.
+ */
+function projectKeys(keys, source) {
+  const values = {};
+  for (const key of keys) {
+    const value = source[key];
+    values[key] = value !== undefined ? value : null;
+  }
+  return values;
+}
+
+/**
+ * Get several values in one round trip.
+ *
+ * chrome.storage.sync.get accepts an array and answers it in a single call, but the
+ * startup path asked for keys one at a time — each one paying not just the round
+ * trip but the retry helper wrapped around it.
+ *
+ * No env-var fallback parameter, unlike getStoredValue: nothing that reads in
+ * batches has an env fallback (the migrations and the Drive state pass none), and
+ * a parameter no caller uses is exactly the speculative generality worth avoiding.
+ * Single-key reads that do need it keep using getStoredValue.
+ *
+ * @param {string[]} keys - Keys to fetch
+ * @returns {Promise<Object>} One own property per requested key; null where absent
+ */
+export async function getStoredValues(keys, backend = chromeStorageBackend) {
+  if (backend.isAvailable()) {
+    try {
+      const result = await safeExecuteChromeAPI(() => backend.syncGet(keys));
+      return projectKeys(keys, result);
+    } catch (error) {
+      console.error('Error getting keys from Chrome storage after retries:', error);
+      console.warn(`Falling back to localStorage for keys: ${keys.join(', ')}`);
+      return projectKeys(keys, getDevStorage());
+    }
+  }
+
+  return projectKeys(keys, getDevStorage());
+}
+
+/**
  * Checks if we're running in what should be extension mode based on URL
  * @returns {boolean} True if URL indicates extension mode
  */
@@ -703,11 +749,31 @@ class SecureStorageService {
 
     console.log('🔄 Starting migration to encrypted storage...')
 
-    for (const [keyName, storageKey] of Object.entries(STORAGE_KEYS)) {
-      if (!this.isSensitiveKey(storageKey)) continue
+    const sensitiveEntries = Object.entries(STORAGE_KEYS)
+      .filter(([, storageKey]) => this.isSensitiveKey(storageKey))
+    const sensitiveKeys = sensitiveEntries.map(([, storageKey]) => storageKey)
 
+    let currentValues
+    if (backend.isAvailable()) {
       try {
-        const currentValue = await getStoredValue(storageKey, undefined, backend)
+        currentValues = projectKeys(sensitiveKeys, await backend.syncGet(sensitiveKeys))
+      } catch (readError) {
+        // Deliberately not degrading to "no values found". That is indistinguishable
+        // from "nothing needed migrating", and it would end the run with zero errors —
+        // marking the migration complete without having read a single key, so the
+        // plain-text values would never be encrypted.
+        console.error('❌ Could not read sensitive keys for migration:', readError)
+        results.errors.push({ key: 'all', error: readError.message })
+        return results
+      }
+    } else {
+      // Development mode reads from local storage, where there is no batch to make.
+      currentValues = await getStoredValues(sensitiveKeys, backend)
+    }
+
+    for (const [keyName, storageKey] of sensitiveEntries) {
+      try {
+        const currentValue = currentValues[storageKey]
 
         if (currentValue && !encryptionService.isEncryptedFormat(currentValue)) {
           console.log(`🔄 Migrating ${keyName} to encrypted format`)
@@ -923,17 +989,27 @@ export async function migrateSyncToLocalStorage(backend = chromeStorageBackend) 
 
   let allKeysSettled = true;
 
+  // Read directly rather than through getStoredValues: that helper degrades a failed
+  // read to null, which here is indistinguishable from "this key holds nothing" — and
+  // a key holding nothing gets removed. A transient read failure would delete exactly
+  // the data this migration exists to preserve.
+  let syncValues;
+  try {
+    syncValues = await backend.syncGet(keysToMigrate);
+  } catch (readError) {
+    // One unreadable key used to skip that key; an unreadable batch skips them all.
+    // Either way nothing is removed and the run stays unmarked, so it retries.
+    console.warn('Could not read mapping keys from sync storage:', readError);
+    console.log('Migration incomplete, will retry on a later startup');
+    return;
+  }
+
+  // Copies stay per key: one oversized value failing to write must not prevent the
+  // others from migrating, which a single combined write would do.
+  const removable = [];
+
   for (const key of keysToMigrate) {
-    let syncValue;
-    try {
-      const result = await backend.syncGet([key]);
-      syncValue = result[key];
-    } catch (readError) {
-      console.warn(`Could not read ${key} from sync storage:`, readError);
-      // Unread is not the same as absent: leave it be and retry on a later startup
-      allKeysSettled = false;
-      continue;
-    }
+    const syncValue = syncValues[key];
 
     const hasData = syncValue !== undefined && syncValue !== null &&
       (typeof syncValue === 'object' ? Object.keys(syncValue).length > 0 : Boolean(syncValue));
@@ -952,10 +1028,14 @@ export async function migrateSyncToLocalStorage(backend = chromeStorageBackend) 
     }
 
     // Safe now: either the data is copied, or there was none to copy
+    removable.push(key);
+  }
+
+  if (removable.length > 0) {
     try {
-      await backend.syncRemove(key);
+      await backend.syncRemove(removable);
     } catch (removeError) {
-      console.warn(`Could not remove ${key} from sync storage:`, removeError);
+      console.warn('Could not remove migrated keys from sync storage:', removeError);
       allKeysSettled = false;
     }
   }

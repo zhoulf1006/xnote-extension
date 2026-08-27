@@ -78,7 +78,13 @@ export function createMemoryBackend(seed = {}) {
     isAvailable: () => true,
     syncGet: async (keys) => { calls.syncGet++; return read('sync', keys); },
     syncSet: async (items) => { calls.syncSet++; Object.assign(areas.sync, items); },
-    syncRemove: async (key) => { calls.syncRemove++; delete areas.sync[key]; },
+    // Accepts an array as well as a single key, because chrome.storage.remove does.
+    // A double that only handled one key would make batched removal look broken here
+    // while working in the browser — the direction of divergence that costs most.
+    syncRemove: async (keys) => {
+      calls.syncRemove++;
+      for (const key of (Array.isArray(keys) ? keys : [keys])) delete areas.sync[key];
+    },
     localGet: async (keys) => { calls.localGet++; return read('local', keys); },
     localSet: async (items) => { calls.localSet++; Object.assign(areas.local, items); }
   };

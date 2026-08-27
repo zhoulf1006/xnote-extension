@@ -3,7 +3,7 @@
  * Handles authentication, file operations, and sync with Google Drive
  */
 
-import { getStoredValue, storeValue, STORAGE_KEYS } from './storageService';
+import { getStoredValue, getStoredValues, storeValue, STORAGE_KEYS } from './storageService';
 import { googleFolderBrowserService } from './googleFolderBrowserService';
 
 class GoogleDriveService {
@@ -789,10 +789,19 @@ class GoogleDriveService {
    * Get current folder configuration
    * @returns {Promise<{useCustom: boolean, parentId: string|null, parentName: string|null}>}
    */
-  async getFolderConfiguration() {
-    const useCustom = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_USE_CUSTOM_LOCATION) || false;
-    const parentId = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID);
-    const parentName = await getStoredValue(STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_NAME);
+  async getFolderConfiguration(backend) {
+    // One read for three keys that are always wanted together. The backend argument
+    // is what lets a test count the round trips; callers pass nothing and get the
+    // real one.
+    const values = await getStoredValues([
+      STORAGE_KEYS.GOOGLE_DRIVE_USE_CUSTOM_LOCATION,
+      STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID,
+      STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_NAME
+    ], backend);
+
+    const useCustom = values[STORAGE_KEYS.GOOGLE_DRIVE_USE_CUSTOM_LOCATION] || false;
+    const parentId = values[STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_ID];
+    const parentName = values[STORAGE_KEYS.GOOGLE_DRIVE_PARENT_FOLDER_NAME];
 
     return {
       useCustom,

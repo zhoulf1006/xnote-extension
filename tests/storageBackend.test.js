@@ -11,6 +11,7 @@ import {
   migrateSyncToLocalStorage,
   storeValue,
   getStoredValue,
+  getStoredValues,
   storeLocalValue,
   getLocalValue,
   checkStorage,
@@ -104,6 +105,78 @@ describe('storage primitives with an injected backend', () => {
     expect(await getLocalValue('big_data', backend)).toEqual({ a: 1 });
     // the same key in the sync area is untouched
     expect(await getStoredValue('big_data', undefined, backend)).toBeNull();
+  });
+});
+
+describe('batched reads', () => {
+  // Present, absent and empty are kept together deliberately: absent and
+  // empty-but-present are the two the batched path is most likely to conflate,
+  // because chrome.storage answers a missing key by omitting the property rather
+  // than by returning undefined for it.
+  const SEED = { present: 'a-value', emptyString: '', zero: 0, falseFlag: false };
+  const KEYS = ['present', 'emptyString', 'zero', 'falseFlag', 'absent'];
+
+  test('reads a group of keys in one backend call rather than one per key', async () => {
+    const backend = createMemoryBackend({ sync: { ...SEED } });
+
+    await getStoredValues(KEYS, backend);
+
+    expect(backend.calls.syncGet).toBe(1);
+  });
+
+  test('answers exactly what the per-key path answers, key for key', async () => {
+    // Differential rather than a hand-written expectation: the claim is
+    // "identical to the per-key path", so the per-key path is what it must be
+    // compared against. A retyped expected-object would only assert what I think
+    // the per-key path does.
+    const batchBackend = createMemoryBackend({ sync: { ...SEED } });
+    const perKeyBackend = createMemoryBackend({ sync: { ...SEED } });
+
+    const batched = await getStoredValues(KEYS, batchBackend);
+
+    for (const key of KEYS) {
+      const perKey = await getStoredValue(key, undefined, perKeyBackend);
+      expect(batched[key]).toBe(perKey);
+    }
+    // And it really was cheaper: one call against five
+    expect(batchBackend.calls.syncGet).toBe(1);
+    expect(perKeyBackend.calls.syncGet).toBe(KEYS.length);
+  });
+
+  test('a key that is absent comes back as an own property, not a hole', async () => {
+    // Callers destructure the result. A missing property and a property set to
+    // null read the same at the call site only until someone uses `in` or
+    // Object.keys, so the shape is pinned rather than left to chance.
+    const backend = createMemoryBackend({ sync: { ...SEED } });
+
+    const values = await getStoredValues(['absent'], backend);
+
+    expect(Object.keys(values)).toEqual(['absent']);
+    expect(values.absent).toBeNull();
+  });
+
+  test('a rejecting backend degrades like the per-key path and writes nothing', async () => {
+    const backend = createMemoryBackend({ sync: { ...SEED } });
+    const failing = {
+      ...backend,
+      syncGet: async () => { throw new Error('storage unavailable'); }
+    };
+
+    const batched = await getStoredValues(KEYS, failing);
+    const perKey = await getStoredValue('present', undefined, {
+      ...backend,
+      syncGet: async () => { throw new Error('storage unavailable'); }
+    });
+
+    // Same degraded answer as the per-key path gives for the same failure
+    expect(batched.present).toBe(perKey);
+    // Unrelated keys are not lost by being asked for in the same call: every
+    // requested key is still accounted for in the result
+    expect(Object.keys(batched).sort()).toEqual([...KEYS].sort());
+    // A read that failed must not have mutated anything
+    expect(backend.calls.syncSet).toBe(0);
+    expect(backend.calls.syncRemove).toBe(0);
+    expect(backend.calls.localSet).toBe(0);
   });
 });
 
