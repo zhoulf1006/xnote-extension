@@ -134,6 +134,9 @@ describe('batched reads', () => {
 
     const batched = await getStoredValues(KEYS, batchBackend);
 
+    // The comparison below lives in a loop, so an empty key list would satisfy it
+    // without comparing anything.
+    expect(KEYS.length).toBeGreaterThan(0);
     for (const key of KEYS) {
       const perKey = await getStoredValue(key, undefined, perKeyBackend);
       expect(batched[key]).toBe(perKey);
@@ -284,9 +287,12 @@ describe('the encryption migration also stops re-running once complete', () => {
   });
 
   test('a run that could not encrypt is not marked done, so it retries later', async () => {
-    // Encryption is unavailable in this environment, which is exactly the case that
-    // must stay unmarked: values stored plain now still need migrating if it becomes
-    // available later.
+    // Encryption is off here because this shared service was never initialised, not
+    // because the environment lacks Web Crypto — it has it. (Initialising would also
+    // need `screen`, which the device-key derivation reads; tests that want
+    // encryption on supply it, in their own file so this one stays unaffected.)
+    // Either way this is the case that must stay unmarked: values stored plain now
+    // still need migrating if encryption becomes available later.
     const backend = createMemoryBackend({ sync: { openai_api_key: 'plain-value' } });
 
     await secureStorageService.migrateToEncrypted(backend);

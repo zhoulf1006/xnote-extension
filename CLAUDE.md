@@ -60,6 +60,7 @@ make dev-pack     # Build + zip with the dev manifest (keeps the `key` field)
 - **Transfer device ID must stay in `localStorage`, never sync storage** — each device needs its own identity (see `transferService.js`).
 - **Drive tokens are never persisted** — a fresh token is fetched per request via `chrome.identity.getAuthToken`; 401s retry once after clearing the cached token.
 - **All IndexedDB schema changes go through `dbManager.js`** — bumping the version anywhere else causes version conflicts between stores.
+- **Nothing that reads mapping keys from `chrome.storage.local` may run before the sync→local migration finishes** — that migration is what puts them there, so a reader that starts first sees nothing, and only on the single startup where the move actually happens. It is part of the startup *prerequisite* (`startupSteps.js`) for this reason, not an independent step; adding a startup step that reads `drive_location_mappings` or the `summary_*` keys means placing it after that prerequisite, never beside it.
 
 ## Testing
 

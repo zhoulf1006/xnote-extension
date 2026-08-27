@@ -9,6 +9,12 @@
  * measure against a real panel — a unit test cannot see round trips issued by code
  * paths it stubs out, and asserting an end-to-end number from here would be
  * claiming coverage this file does not have.
+ *
+ * Counting backend calls is asserting on an interaction, normally a smell. The
+ * exemption taken here: chrome.storage is a system boundary, and the number of
+ * round trips is not an implementation detail behind the requirement — it *is* the
+ * requirement. There is no observable output that distinguishes one batched read
+ * from three separate ones.
  */
 import { describe, test, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';

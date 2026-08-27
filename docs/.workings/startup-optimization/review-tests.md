@@ -265,3 +265,116 @@ green.
 Note on why the assertion is shaped as it is: it checks both that the call has **not settled** and that
 `lastSyncError` is still null. Checking only settlement would pass if the call resolved with a wrong
 error; checking only the error would pass if the call hung for an unrelated reason.
+
+---
+
+# review-tests — #18 startup seam, batched reads, concurrent independent steps
+
+31 cases added across `startupSequence.test.js` (9), `startupSteps.test.js` (6),
+`migrationBatching.test.js` (7), `driveReadBatching.test.js` (5) and the new
+`batched reads` block in `storageBackend.test.js` (4). Suite: 53 → 84.
+
+## Dimension 1: coverage — findings
+
+There is no spec for this work, so the coverage list is the checklist rows #18 owns.
+All ten are answered, each by a named case:
+
+| Row | Case |
+|---|---|
+| 8 mapping keys per round trip | "all four mapping keys are fetched in a single call" |
+| 9 sensitive keys per round trip | "every sensitive key is fetched in a single call" |
+| 10 Drive reads | "three configuration keys cost one read, not three"; "initialization never fetches the connected flag itself"; "the remaining store keys are fetched together in one call" |
+| 11 absent/empty identical to per-key | "answers exactly what the per-key path answers, key for key"; "a key that is absent comes back as an own property, not a hole" |
+| 12 degrade on backend failure | "a rejecting backend degrades like the per-key path and writes nothing" |
+| 20 independent steps overlap | "a dependent starts while an earlier one is still unfinished"; "diagnostics does not wait for the encryption migration" |
+| 21 prerequisite ordering | "no dependent starts until the prerequisite has finished" |
+| 22 one failure contained + surfaced | "the others still complete and the failure is reported" |
+| 22a sequence driveable with injected steps | all of `startupSequence.test.js` |
+| 22b hung background step | "startup completes while a background step hangs forever" |
+
+**Declared gaps** (written into the test file headers, not only here):
+
+- **The App.vue call site is not covered.** `buildStartupSteps` proves the roles are
+  assigned correctly; nothing proves App.vue hands the *real* functions to the right
+  roles. Passing the wrong function there turns nothing red. Closing it needs a started
+  panel — #19's extension-mode run.
+- **No case runs against real chrome.storage.** Every case here drives the in-memory
+  backend. Its fidelity to chrome.storage — in particular that a missing key is an
+  absent property rather than an undefined one — is an assumption inherited from #13,
+  not re-derived here, and every case using it inherits that assumption too.
+- Extension-mode behaviour generally belongs to #19.
+
+**Fixture sourcing.** The rule targets external/third-party data. The values here are
+the app's own (storage keys it wrote itself), so there is no third-party sample to copy
+shapes from. The one genuinely external shape that matters is chrome.storage's own
+response convention, which is modelled in the memory backend — flagged above as
+inherited rather than independently verified, which is the honest description.
+
+## Dimension 2: case design — findings
+
+- **No mocking of our own modules.** Verified by search, not by recollection: no
+  `vi.mock`, `vi.spyOn` or `vi.fn` in any of the four files. Every double is a
+  hand-written object passed through an injection seam.
+- **No private access and no unreachable state.** `globalThis.screen` is supplied in
+  `migrationBatching.test.js` — that is providing an environment a real browser has, not
+  reaching into the service. `secureStorageService.initialize()` is a public method.
+- **Interaction assertions — exemption taken and recorded.** Counting `backend.calls`
+  is asserting on an interaction, normally a rewrite trigger. The exemption applies:
+  chrome.storage is a system boundary, and the round-trip count is not a detail behind
+  the requirement, it *is* the requirement. No observable output distinguishes one
+  batched read from three separate ones. Noted in `driveReadBatching.test.js`'s header
+  so the exemption travels with the code.
+- **Ordering asserted through deferred promises, not timers.** A concurrency case built
+  on `setTimeout` races only proves one delay is shorter than another and goes green on
+  sequential code whenever the machine is fast enough.
+
+## Dimension 3: false greens — findings
+
+**Every case was asked "when would this go red?".** For the load-bearing ones the answer
+was checked by mutation rather than asserted: 19 of 31 cases have been driven red by a
+deliberate defect and restored. Each mutation was confirmed to land on the tested path,
+to fail at the matching assertion, and was reverted by restoring a pre-mutation snapshot
+of that file only — never by checking the file out, which would have discarded the
+uncommitted real work along with it.
+
+| Mutation | Case turned red |
+|---|---|
+| A sequentialise dependents | "a dependent starts while an earlier one is still unfinished" |
+| B await background steps | "startup completes while a background step hangs forever" (by timeout) |
+| C `Promise.all` for `allSettled` | "the others still complete and the failure is reported" |
+| D omit absent keys | 3 cases in the batched-reads block |
+| E per-key fetch in `getStoredValues` | "reads a group of keys in one backend call" |
+| F rethrow instead of degrading | "a rejecting backend degrades like the per-key path" |
+| G failed mapping read treated as no-data | "a failed batched read migrates nothing and stays unmarked" |
+| H mapping keys read one at a time | "all four mapping keys are fetched in a single call" |
+| I remove keys one at a time | "the keys are removed from sync in a single call" |
+| J swallow encryption read failure | "a failed batched read is not recorded as a completed migration" |
+| K per-key folder configuration | "three configuration keys cost one read, not three" |
+| L restore the duplicate connected read | "initialization never fetches the connected flag itself" |
+| M split the store's two settings reads | "the remaining store keys are fetched together in one call" |
+| N demote the mapping migration to a dependent | both ordering cases in `startupSteps.test.js` |
+| O per-key sensitive read | "every sensitive key is fetched in a single call" |
+| P serialise the two dependents | "diagnostics does not wait for the encryption migration" |
+
+**Why this mattered here.** Most of these cases first went red only because a module or
+function did not exist yet — a red that proves the import resolves, not that the
+assertion is sensitive to the defect it exists to catch. Treating that as validation
+would have been a certificate written by the candidate. Mutation O and P specifically
+covered cases whose only prior red was of that kind, and both were sensitive.
+
+**One vacuous-pass shape found and fixed.** "answers exactly what the per-key path
+answers" carries its comparison inside a `for` loop, so an empty key list would have
+satisfied it while comparing nothing — and the assertions after the loop would still
+have passed, since a zero-key batched read is still one call. A non-empty guard was
+added.
+
+**Remaining unmutated cases (12)** are value/regression guards whose red condition is
+plain by inspection — "dependents receive the value the prerequisite resolved with",
+"absent configuration keys still produce the documented defaults", and similar. They are
+paired with mutated cases covering the same code path, so a defect there is caught by
+the pair even where the guard alone was not separately driven red.
+
+**Conditional-skip check: none present.** `migrationBatching.test.js` asserts
+`encryptionEnabled === true` in its own case rather than skipping when encryption is
+unavailable. An environment change turns that red instead of quietly passing the whole
+block — the distinction the report cannot otherwise show.

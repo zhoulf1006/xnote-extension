@@ -335,3 +335,119 @@ No change to what is stored, requested or logged.
 1. The startup sequence in `App.vue`'s `onMounted` still has no seam, so "the rest of startup
    completes while Drive hangs" is covered by observation rather than by a test. #18 needs that seam
    to test ordering and should introduce it.
+
+---
+
+# review-code — #18 startup seam, batched reads, concurrent independent steps
+
+Change surface: `startupSequence.js` (new, machinery), `startupSteps.js` (new, role
+assignment), `storageService.js` (`getStoredValues` added; both migrations batched),
+`storageBackend.js` (`syncRemove` accepts arrays), `googleDriveService.js`
+(`getFolderConfiguration` batched), `googleDrive.js` (duplicate read removed, settings
+batched), `App.vue` (`onMounted` wired to the seam), four test files.
+
+## [1] Underlying premises — findings
+
+- **chrome.storage accepts an array on `get` and on `remove`.** The whole batching
+  change rests on this. Settled from shipped code rather than from documentation:
+  `storageService.js:173` has always called `syncGet([key])`, and
+  `screenshotService.js:210` ships `chrome.storage.local.remove(['screenshotHistory'])`.
+  `remove` is the same method on the same `StorageArea` interface for both areas, and
+  array length is not a distinct parameter type. **Not measured in a live extension** —
+  no chrome APIs are reachable from the test environment. #19 exercises the real thing
+  in extension mode and is where this stops being inference.
+
+- **A comment in `tests/storageBackend.test.js` recorded a false cause.** It said
+  encryption was unavailable in the test environment. Probed it: Web Crypto *is*
+  available (`EncryptionService.isAvailable()` returns true), and the case passes
+  because the shared service was never initialised. Initialising additionally needs
+  `screen`, which the device-key derivation reads. Corrected in place. This is the
+  layer-1 failure mode exactly: a passing test carrying an explanation that would have
+  sent the next reader down the wrong path, indistinguishable in the source from a
+  grounded one.
+
+- **Removing the store's `google_drive_connected` read is behaviour-preserving.**
+  Checked against the old logic rather than assumed: old code set `isConnected` from the
+  stored flag and then overwrote it with `isAuthenticated()` when truthy; the check
+  itself reads the same flag and returns false when unset. Both paths yield the same
+  value for both branches, and the falsy branch still makes no token call.
+
+## [2] Runnability — findings
+
+- **BUG FOUND AND FIXED — mapping migration raced Drive initialization.** Making the
+  mapping migration an independent dependent let it run concurrently with Drive init.
+  `driveMappings.loadMappings()` reads `drive_location_mappings` from **local** storage,
+  and that migration is what moves the key sync→local. On the one startup where the move
+  actually happens, Drive could read local first and find nothing. Escape surface:
+  **same-layer** — one step corrupted by another's timing — so fixed rather than
+  deferred. The migration is now part of storage readiness, which is what it always
+  was: it does not tidy up, it relocates data other components read. Enumerated all four
+  migrated keys and their readers first; the three summary keys are read the same way
+  from local by `summaryMappings.js`, so the fix covers them too rather than only the
+  one that surfaced. Regression test: `startupSteps.test.js` → "Drive initialization
+  never begins before the mapping migration has finished". Verified by mutation:
+  demoting the migration back to a dependent turns it red.
+
+- **BUG FOUND AND FIXED (pre-existing) — a failed read marked the encryption migration
+  complete.** `migrateToEncrypted` read through a helper that degrades a failed read to
+  null, which is indistinguishable from "this key holds nothing". A transient storage
+  failure therefore ended the run with zero errors and set the completion marker,
+  leaving plain-text keys never encrypted. Escape surface: **upper layer** — it defeats
+  the migration permanently, not just for that run. Now reports the failure and stays
+  unmarked. The mapping migration reads raw for the same reason, where the consequence
+  would have been worse still: keys that look empty get removed.
+
+- Startup step order compared against the original sequence step by step. Drive still
+  starts at the same relative point; the encryption migration and diagnostics now run
+  concurrently with each other and with Drive, and none reads what another writes.
+
+- Failure escape surfaces, per step: prerequisite → upper layer **by design** (storage
+  is genuinely required; unchanged from before). Encryption migration, diagnostics →
+  self-harm; each is now contained where previously either aborted everything after it.
+  Drive → self-harm, and its rejection is now caught rather than becoming an unhandled
+  rejection as it was before.
+
+## [3] Security correctness — conclusion: no findings
+
+Reviewed rather than skipped. No new persistence, no new network calls, no widening of
+permissions. Logging was checked specifically because batching changed the messages: the
+fallback path logs key *names* (`openai_api_key`), never values, matching what the
+per-key path already logged. `getStoredValues` holds values in memory only. The
+diagnostics dump remains opt-in and unchanged.
+
+## [4] Consistency — findings
+
+- Invariants in CLAUDE.md re-checked against this diff: keys still only stored through
+  `secureStorageService`; large mapping data still lands in `chrome.storage.local`;
+  transfer device ID untouched; Drive tokens still never persisted; no IndexedDB schema
+  change. None broken.
+- Machinery and policy were deliberately split (`startupSequence.js` vs
+  `startupSteps.js`) to avoid Divergent Change — one file would otherwise be edited both
+  when the sequencing rules change and when a step is added.
+- Data Clumps: the three Drive folder-configuration keys always travelled together and
+  are now fetched together, which is the smell resolving rather than appearing.
+
+## Change-surface-external finding — reported, not fixed
+
+**`Summary/index.vue` reads mapping data from its own `onMounted`.** Vue mounts children
+before the parent, so in principle it can read the mapping keys before `App.vue`'s
+startup migrates them — the same class as the bug fixed above, but pre-existing and
+outside this change.
+
+- **Blast radius**: unreachable in practice today. The tab is rendered with `v-if` and
+  the default tab is `chat` (`navigation.js:5`), so the component only mounts on user
+  action, long after startup. It would become reachable if the default tab changed to
+  `summary` or tab state were restored across sessions.
+- **Recommended handling**: do not fix now — it fixes itself if the store is made to
+  await storage readiness, which is a broader change than this ticket.
+- **Home**: needs one. It has no persistent place yet; raising it here so it is either
+  ticketed or consciously dropped rather than left in a conversation.
+
+## Refactor list (not blocking, for user decision)
+
+1. **`getStoredValue` and `getStoredValues` differ by one character.** Easy to misread
+   at a call site, and the compiler cannot help in a JS codebase. Matches the existing
+   naming style in the file, so left alone. Impact: self-harm. Suggested: no change.
+2. **Verbose diagnostics can dump a mid-migration snapshot** now that it runs alongside
+   the encryption migration. Diagnostics-only and off by default. Impact: self-harm.
+   Suggested: no change.

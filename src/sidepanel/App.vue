@@ -485,6 +485,7 @@ import { notify } from './composables/useToast';
 import { confirmAction, useConfirmHost } from './composables/useConfirm';
 import { filterVisionCapable } from '@/api/modelCatalog';
 import { runStartupSequence } from './startupSequence';
+import { buildStartupSteps } from './startupSteps';
 
 const navigationStore = useNavigationStore();
 // Single app-wide confirmation dialog host (window.confirm is suppressed in side panels)
@@ -831,58 +832,13 @@ onMounted(async () => {
   });
 
   try {
-    // Storage is the one genuine prerequisite; the steps after it need it up but do
-    // not need each other, so they run together rather than in a queue. Nothing here
-    // decides what the steps are — that stays visible in this list.
-    const { value: storageStatus, failures } = await runStartupSequence({
-      prerequisite: {
-        name: 'storage',
-        run: async () => {
-          console.log('Initializing storage service...');
-          const status = await initializeStorage();
-          console.log('Storage initialization completed:', status);
-          return status;
-        }
-      },
-      dependents: [
-        {
-          name: 'mapping-migration',
-          run: async () => {
-            // Moves large mapping data out of sync storage, whose quota it outgrows
-            await migrateSyncToLocalStorage();
-            console.log('✅ Storage migration check completed');
-          }
-        },
-        {
-          name: 'encryption-migration',
-          run: async () => {
-            // Secure storage was already brought up by the prerequisite
-            if (!secureStorageService.encryptionEnabled) return;
-            console.log('🔐 Encryption available, checking for migration needs...');
-            await secureStorageService.migrateToEncrypted();
-          }
-        },
-        {
-          name: 'storage-diagnostics',
-          run: async () => {
-            const status = await checkStorage();
-            console.log('Storage status check completed:', status);
-          }
-        }
-      ],
-      background: [
-        {
-          // The panel is fully usable before Drive status is known, and this can make
-          // network calls. The nav indicator shows how it settles.
-          name: 'google-drive',
-          run: async () => {
-            const ok = await googleDriveStore.initialize();
-            console.log(ok ? '✅ Google Drive store initialized' : 'ℹ️ Google Drive not initialized');
-          }
-        }
-      ],
-      onStepError: (name, error) => console.error(`❌ Startup step "${name}" failed:`, error)
-    });
+    const { value: storageStatus, failures } = await runStartupSequence(buildStartupSteps({
+      initializeStorage,
+      migrateMappings: migrateSyncToLocalStorage,
+      secureStorage: secureStorageService,
+      checkStorage,
+      initializeDrive: () => googleDriveStore.initialize()
+    }));
 
     // Note: LLM config store will initialize itself when accessed
     // The store maintains backward compatibility with localStorage access
