@@ -10,6 +10,12 @@
  * The run is single-flight: whoever asks first starts it, everyone else joins. So
  * the guarantee no longer depends on who mounts when — the property the old
  * arrangement lost the moment a child mounted early.
+ *
+ * Known gap, stated rather than papered over: these cases drive injected readiness
+ * instances. Nothing here proves App.vue wires the startup prerequisite through the
+ * *singleton* the stores default to — wiring it to a fresh instance instead would
+ * split the run in two and turn nothing red. Same declared gap as the startup-steps
+ * wiring in #18; closing it needs a started panel (#19's extension-mode run).
  */
 import { describe, test, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
