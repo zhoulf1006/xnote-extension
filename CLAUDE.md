@@ -60,6 +60,7 @@ make dev-pack     # Build + zip with the dev manifest (keeps the `key` field)
 - **Transfer device ID must stay in `localStorage`, never sync storage** — each device needs its own identity (see `transferService.js`).
 - **Drive tokens are never persisted** — a fresh token is fetched per request via `chrome.identity.getAuthToken`; 401s retry once after clearing the cached token.
 - **All IndexedDB schema changes go through `dbManager.js`** — bumping the version anywhere else causes version conflicts between stores.
+- **Nothing that reads mapping keys from `chrome.storage.local` may run before the sync→local migration finishes** — that migration is what puts them there, so a reader that starts first sees nothing, and only on the single startup where the move actually happens. It is part of the startup *prerequisite* (`startupSteps.js`) for this reason, not an independent step; adding a startup step that reads `drive_location_mappings` or the `summary_*` keys means placing it after that prerequisite, never beside it.
 
 ## Testing
 
@@ -69,6 +70,8 @@ make dev-pack     # Build + zip with the dev manifest (keeps the `key` field)
   2. Extension mode: `pnpm run build`, load `dist/` unpacked at `chrome://extensions/`.
 - Verify context menus, encrypted storage, and Drive sync in extension mode — none of these exist in dev mode.
 - Create test files or scripts under the `tests/` folder.
+- **A test that needs a browser global must define it, never lean on the runtime having it.** CI pins Node 20, which has no global `navigator`; newer local Node versions do. A test relying on that difference passes locally and fails only in CI — or worse, passes in both for the wrong reason. Define what you need (`Object.defineProperty` where the global already exists as a getter) and restore it afterwards. `tests/migrationBatching.test.js` does this for `screen` and `navigator`.
+- **To reproduce a CI-only test failure locally, run the CI Node version**: `PATH="$HOME/.nvm/versions/node/v20.9.0/bin:$PATH" pnpm test`.
 
 ### Debugging storage
 
