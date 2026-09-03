@@ -205,7 +205,10 @@ class EncryptionService {
     try {
       // Try to parse as base64 -> JSON
       const parsed = JSON.parse(atob(data))
-      return parsed && typeof parsed === 'object' && parsed.iv && parsed.data
+      // Boolean() because && yields its last operand: without it this returned the
+      // ciphertext byte array for encrypted input and undefined for a wrong-shaped
+      // envelope — truthiness-identical, so no if-caller could ever notice.
+      return Boolean(parsed && typeof parsed === 'object' && parsed.iv && parsed.data)
     } catch {
       return false
     }

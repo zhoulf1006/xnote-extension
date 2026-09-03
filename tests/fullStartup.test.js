@@ -132,10 +132,7 @@ describe('first startup of a legacy user, everything combined', () => {
     // The plain API key was encrypted in place and its migration marked
     const key = (await backend.syncGet(['openai_api_key'])).openai_api_key;
     expect(key).not.toBe('sk-plain-legacy-key');
-    // Boolean() because isEncryptedFormat returns its last &&-operand (the byte
-    // array) rather than a boolean — fine for its if-callers, fatal for toBe(true).
-    // Not constant-true: a plain string comes back false through the same wrap.
-    expect(Boolean(encryptionService.isEncryptedFormat(key))).toBe(true);
+    expect(encryptionService.isEncryptedFormat(key)).toBe(true);
     const encMarker = await backend.localGet(['storage_migration_encryption_v1']);
     expect(encMarker.storage_migration_encryption_v1).toBe(true);
 
