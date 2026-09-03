@@ -465,9 +465,9 @@ import {
   initializeStorage,
   checkStorage,
   storeSecureValue,
-  secureStorageService,
-  migrateSyncToLocalStorage
+  secureStorageService
 } from '@/api/storageService';
+import { storageReadiness } from '@/api/storageReadiness';
 import Chat from './components/Chat/index.vue';
 import QuickLinks from './components/QuickLinks/index.vue';
 import Translation from './components/Translation/index.vue';
@@ -834,7 +834,10 @@ onMounted(async () => {
   try {
     const { value: storageStatus, failures } = await runStartupSequence(buildStartupSteps({
       initializeStorage,
-      migrateMappings: migrateSyncToLocalStorage,
+      // Through storageReadiness rather than calling the migration directly, so this
+      // is the same single-flight run the mapping stores await — a component that
+      // mounted early joins it instead of racing it.
+      migrateMappings: () => storageReadiness.ensure(),
       secureStorage: secureStorageService,
       checkStorage,
       initializeDrive: () => googleDriveStore.initialize()

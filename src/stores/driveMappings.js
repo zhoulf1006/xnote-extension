@@ -14,6 +14,7 @@
 
 import { defineStore } from 'pinia';
 import { getLocalValue, storeLocalValue } from '@/api/storageService';
+import { storageReadiness } from '@/api/storageReadiness';
 
 const STORAGE_KEY = 'drive_location_mappings';
 
@@ -60,9 +61,15 @@ export const useDriveMappings = defineStore('driveMappings', {
     /**
      * Load mappings from storage (uses local storage for large data)
      */
-    async loadMappings() {
+    async loadMappings(readiness = storageReadiness, backend = undefined) {
+      // The sync→local migration is what puts this key into local storage, and Vue
+      // mounts components before the parent's onMounted runs the migration — so wait
+      // for the shared run rather than trusting the caller to have mounted late
+      // enough. A failed run must not block the read: the data may already be in
+      // place, and whatever is there beats nothing.
+      await readiness.ensure(backend).catch(() => {});
       try {
-        const stored = await getLocalValue(STORAGE_KEY);
+        const stored = await getLocalValue(STORAGE_KEY, backend);
         if (stored) {
           this.locations = stored;
         }
