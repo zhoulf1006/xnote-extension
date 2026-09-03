@@ -60,3 +60,21 @@ re-copying the pre-mutation snapshot of the mutated file only.
 No conditional skips, no tautologies (expected values are literals or independently
 seeded data, never recomputed via the implementation), all promises awaited
 (`rejects.toThrow` included).
+
+---
+
+## Addendum (2026-09-03) — write-side cases
+
+Two cases added with the folded-in write-side fix (suite 90 → 92):
+
+- "is not overwritten by the legacy data the migration is copying" — first red showed
+  the exact clobber (`folder-legacy` winning over the fresh write), so the red's cause
+  is precisely the defect the case guards. Formal mutation U (removing the writer's
+  await) turned it red again after the fix; restored to green.
+- "a failed migration does not block the write either" — first red was a missing
+  signature (`backend` ignored), which is the wiring half of the same claim; its
+  degradation assertion is the same shape as mutation-S-verified read-side case.
+
+State setup assigns `store.locations` directly, with the reachability noted in the
+case: the state is reachable via `setCurrentLocation`, which is not used because that
+action also persists — the very step under test.

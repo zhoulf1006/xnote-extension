@@ -82,9 +82,15 @@ export const useDriveMappings = defineStore('driveMappings', {
     /**
      * Save mappings to storage (uses local storage for large data)
      */
-    async saveToStorage() {
+    async saveToStorage(readiness = storageReadiness, backend = undefined) {
+      // Writers wait for the same run readers do, and for the mirror reason: the
+      // migration's copy is the last write to win, so a change persisted while the
+      // copy is in flight would be silently reverted to the legacy sync data. A
+      // failed run must not block the write — persisting the user's change beats
+      // protecting a copy that already failed.
+      await readiness.ensure(backend).catch(() => {});
       try {
-        await storeLocalValue(STORAGE_KEY, this.locations);
+        await storeLocalValue(STORAGE_KEY, this.locations, backend);
       } catch (error) {
         console.error('Error saving drive mappings:', error);
       }

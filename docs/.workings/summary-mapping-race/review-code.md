@@ -69,3 +69,15 @@ nothing at all. The deletion only removes code.
 
 Empty — nothing deferred beyond the write-side finding above, which is a decision for
 the user rather than a refactor.
+
+---
+
+## Addendum (2026-09-03) — write-side finding resolved by decision
+
+The layer-2 finding above ("the write-side mirror of this race", recorded as reported-
+not-fixed) was put to the user with both options; they chose to fix and fold into the
+same PR. `saveToStorage` — the single persistence choke point, verified: the only
+`storeLocalValue` call in the store, with four internal callers — now awaits the same
+readiness run, so every current and future writer inherits the ordering. The CLAUDE.md
+invariant was widened in step: reads *and* writes await `storageReadiness.ensure()`.
+The original entry above is left as written; it records the state at review time.

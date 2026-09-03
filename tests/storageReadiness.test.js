@@ -93,6 +93,42 @@ describe('a reader that mounts before the migration finishes', () => {
   });
 });
 
+describe('a write that lands while the migration is mid-flight', () => {
+  test('is not overwritten by the legacy data the migration is copying', async () => {
+    // The mirror of the read race: the migration's copy is the *last* write to win
+    // unless writers also wait for it. Without the await, the user's change lands
+    // first and the legacy sync data then lands on top of it — a silent revert, on
+    // the one startup where the migration actually copies.
+    const legacy = { 'folder-legacy': { summaries: { old: 'file-old' } } };
+    const backend = slowCopyBackend({ drive_location_mappings: legacy });
+    const readiness = createStorageReadiness(() => migrateSyncToLocalStorage(backend));
+
+    const startupRun = readiness.ensure();       // copy in flight
+
+    const store = useDriveMappings();
+    // State reachable via setCurrentLocation; assigned directly because that action
+    // also persists, which is the very step under test here.
+    store.locations = { 'folder-new': { summaries: {} } };
+    await store.saveToStorage(readiness, backend);
+    await startupRun;
+
+    const stored = (await backend.base.localGet(['drive_location_mappings'])).drive_location_mappings;
+    expect(stored).toEqual({ 'folder-new': { summaries: {} } });
+  });
+
+  test('a failed migration does not block the write either', async () => {
+    const backend = createMemoryBackend();
+    const readiness = createStorageReadiness(async () => { throw new Error('marker write failed'); });
+
+    const store = useDriveMappings();
+    store.locations = { 'folder-x': { chats: {} } };
+    await store.saveToStorage(readiness, backend);
+
+    const stored = (await backend.localGet(['drive_location_mappings'])).drive_location_mappings;
+    expect(stored).toEqual({ 'folder-x': { chats: {} } });
+  });
+});
+
 describe('a failed migration degrades the read instead of blocking it', () => {
   test('the reader still loads whatever local storage already holds', async () => {
     const existing = { 'folder-old': { summaries: {} } };
