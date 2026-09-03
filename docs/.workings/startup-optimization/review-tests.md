@@ -408,3 +408,61 @@ Placed there rather than in a retrospective because that is the path a test auth
 already on. Verified against the real thing, not inferred: with the fix, `typeof
 navigator === 'undefined'` confirmed on Node 20.9.0 and all 84 cases pass there and on
 Node 24.
+
+---
+
+# review-tests — #19 closeout (fullStartup.test.js)
+
+Two cases; suite 92 → 94.
+
+## Dimension 1: coverage — findings
+
+Coverage list = criterion 4 of the closeout ticket. Case 1 (legacy first open) drives
+the combined end state: real migrations, real readiness wiring shape, real folder-config
+read against one seeded backend; case 2 proves the repeat open is cheap *because of*
+case-1's writes — the cross-ticket interaction (markers written by one open gating the
+next) that no single-slice file exercises. Concurrency overlap itself is deliberately
+not re-asserted here; it stays owned by `startupSequence.test.js` — this file asserts
+the combined *end state*, which is what the criterion names.
+
+Declared gaps in the file header (extension branch of initializeStorage; App.vue
+wiring): both now addressed by the extension-mode run recorded in
+`extension-verification.md`, with the wiring claim stated to its actual strength there.
+
+**Fixture check — for once against real data.** The legacy-backend shape was written
+before round 1 of the extension run, then corroborated by it: the user's real storage
+holds exactly the seeded key names (mapping keys, encrypted api keys, drive flags).
+One structural feature the real dump had that no fixture imagined: a stray
+empty-string key (`"": ""`) in both areas. Walked it against the code under test:
+migrations enumerate fixed key names, batched reads ask for specific keys — the stray
+key is unreachable by everything this feature touched, so no case is added; recorded
+here so the judgement is visible rather than silent.
+
+## Dimension 2: case design — findings
+
+- No `vi.mock`/`vi.spyOn`/`vi.fn` (verified by search, count 0).
+- The Drive step is a stub performing *real* reads (store `loadMappings` joining the
+  real readiness run, real `getFolderConfiguration`) — a seam double, not a mock of
+  own logic.
+- Interaction counting in case 2: same system-boundary exemption as the batching files,
+  and additionally the counted figure is itself deliverable evidence (cited by
+  `measurement.md`).
+- Pinia re-initialised per case; backends per case; no shared mutable state beyond the
+  intentionally shared secure-storage singleton, isolated per file.
+
+## Dimension 3: false greens — findings
+
+- Case 1's first red was a **test bug, correctly attributed before touching production
+  code**: `isEncryptedFormat` returns its last `&&`-operand (the byte array), not a
+  boolean, so `toBe(true)` failed on genuinely encrypted data. The assertion was
+  wrapped in `Boolean()` with the reason recorded inline; the wrap is not constant-true
+  (a plain string yields false through it). The production wart was left alone — every
+  caller uses the function in boolean context — and is recorded here rather than fixed.
+- Design sensitivity proven by mutation, not by that accidental red: V (marker never
+  written) turns **both** cases red; W (copy-less migration, the data-loss shape) turns
+  case 1 red. Attribution checked; restoration from the pre-mutation snapshot only.
+- The `< 10` ops threshold was checked for constant-truth: under mutation V a
+  re-migrating second open exceeds it, so it can fail independently of the key-name
+  assertions beside it.
+- No conditional skips; every await awaited; the header states what still needs a real
+  panel instead of letting the file imply completeness.

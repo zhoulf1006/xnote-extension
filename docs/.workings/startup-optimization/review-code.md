@@ -451,3 +451,51 @@ outside this change.
 2. **Verbose diagnostics can dump a mid-migration snapshot** now that it runs alongside
    the encryption migration. Diagnostics-only and off by default. Impact: self-harm.
    Suggested: no change.
+
+---
+
+# review-code — #19 closeout (fullStartup test + evidence documents)
+
+Change surface: `tests/fullStartup.test.js`, `measurement.md`,
+`extension-verification.md`, `final-regression.md`. No production code. The layered scan
+applies mostly to the documents, which are factual-claim surfaces.
+
+## [1] Underlying premises — findings
+
+- **A phase-3 row cited a command that had not been run.** final-regression's store-
+  enumeration check named a grep as its basis before the grep existed — the exact
+  "claims coverage it does not have" failure this whole feature has been policing. Ran
+  the real command; the two README hits are directory-tree lines naming directories,
+  not members, so the verdict (nothing falsified) stands — but now on evidence. Row
+  rewritten to cite the actual command and its actual output.
+- **A gap-closure claim overstated the evidence.** extension-verification said the
+  migration ran "through the real prerequisite"; the paste-backs cannot distinguish
+  which asker started the single-flight run, and pretending otherwise converts a design
+  property (routes converge) into an unobserved ordering claim. Rewritten to state
+  precisely what is and is not proven, and where the role-assignment half is covered.
+- measurement.md's 25/8/3 walks re-derived once more against the extracted files before
+  accepting: the before-side items (eager remove present at 3c53f7a, double CONNECTED
+  read, per-key migration gets+removes on the no-data path, read-all in checkStorage)
+  each re-confirmed by the recorded greps; the after-side measured subset (4) agrees
+  item-for-item with the derived 8 minus the stubbed steps.
+
+## [2] Runnability — findings
+
+- The test's `driveSettled` deferred resolves only after the stubbed Drive step's
+  reads; if those throw, the case hangs into the runner's timeout — a red, correctly
+  attributed by the timeout message to the awaiting case. Acceptable failure shape.
+- The `< 10` ops threshold is not constant-true: mutation V (marker unset) pushes a
+  re-migrating second open past it, independent of the key-name assertions that also
+  fire.
+
+## [3] Security correctness — conclusion: no findings
+
+The documents contain no secrets: the dump in chat was redacted at source (12-char
+prefixes, key counts); nothing sensitive was copied into the records — checked the
+three documents for the folder id and key material specifically.
+
+## [4] Consistency — findings
+
+None. Records follow the workings conventions (dated appended sections; checklist rows
+untouched except through their owning documents). No smells material to a test file
+plus three records.
