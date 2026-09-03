@@ -14,6 +14,7 @@
 
 import { defineStore } from 'pinia';
 import { getLocalValue, storeLocalValue } from '@/api/storageService';
+import { storageReadiness } from '@/api/storageReadiness';
 
 const STORAGE_KEY = 'drive_location_mappings';
 
@@ -60,9 +61,15 @@ export const useDriveMappings = defineStore('driveMappings', {
     /**
      * Load mappings from storage (uses local storage for large data)
      */
-    async loadMappings() {
+    async loadMappings(readiness = storageReadiness, backend = undefined) {
+      // The sync→local migration is what puts this key into local storage, and Vue
+      // mounts components before the parent's onMounted runs the migration — so wait
+      // for the shared run rather than trusting the caller to have mounted late
+      // enough. A failed run must not block the read: the data may already be in
+      // place, and whatever is there beats nothing.
+      await readiness.ensure(backend).catch(() => {});
       try {
-        const stored = await getLocalValue(STORAGE_KEY);
+        const stored = await getLocalValue(STORAGE_KEY, backend);
         if (stored) {
           this.locations = stored;
         }
@@ -75,9 +82,15 @@ export const useDriveMappings = defineStore('driveMappings', {
     /**
      * Save mappings to storage (uses local storage for large data)
      */
-    async saveToStorage() {
+    async saveToStorage(readiness = storageReadiness, backend = undefined) {
+      // Writers wait for the same run readers do, and for the mirror reason: the
+      // migration's copy is the last write to win, so a change persisted while the
+      // copy is in flight would be silently reverted to the legacy sync data. A
+      // failed run must not block the write — persisting the user's change beats
+      // protecting a copy that already failed.
+      await readiness.ensure(backend).catch(() => {});
       try {
-        await storeLocalValue(STORAGE_KEY, this.locations);
+        await storeLocalValue(STORAGE_KEY, this.locations, backend);
       } catch (error) {
         console.error('Error saving drive mappings:', error);
       }
